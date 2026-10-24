@@ -4,11 +4,14 @@ import { useState } from "react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, loadingLabelFor } from "./ui";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
-const SAMPLE =
-  "A finance ops copilot resolved a routine ticket, but our logs show it also pulled a full customer export and emailed it to a domain we've never corresponded with before. The visible ticket only asked for a password reset.";
+const SAMPLES = [
+  "A finance ops copilot resolved a routine ticket, but our logs show it also pulled a full customer export and emailed it to a domain we've never corresponded with before. The visible ticket only asked for a password reset.",
+  "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS and spread to other servers over SMB.",
+  "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold, like they're trying to map out and steal the model.",
+];
 
 export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean }) {
-  const [text, setText] = useState(SAMPLE);
+  const [text, setText] = useState(SAMPLES[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ results: RetrieveResult[]; narrative: string } | null>(null);
@@ -39,6 +42,17 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
       title="2. Is This a Known Pattern?"
       subtitle="Paste a new, unlabeled incident description. SecureBERT retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
     >
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {SAMPLES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setText(s)}
+            className="text-xs px-2 py-1 rounded border border-panel-border text-muted hover:text-foreground cursor-pointer"
+          >
+            {s.length > 42 ? s.slice(0, 42) + "..." : s}
+          </button>
+        ))}
+      </div>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}

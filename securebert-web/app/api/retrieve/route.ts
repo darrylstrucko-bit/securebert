@@ -22,10 +22,12 @@ export async function POST(request: Request) {
   }
 
   const matchLines = results
-    .map(
-      (r, i) =>
-        `${i + 1}. ${r.case_id} (${r.case_name}) -- cosine similarity ${r.similarity.toFixed(3)}, family: ${r.attack_family}`
-    )
+    .map((r, i) => {
+      const attack = (r.mitre_attack_mapping as { technique_id?: string }[]).map((m) => m.technique_id).filter(Boolean);
+      const atlas = (r.mitre_atlas_mapping as { technique_id?: string }[]).map((m) => m.technique_id).filter(Boolean);
+      const tags = [...attack.map((t) => `ATT&CK ${t}`), ...atlas.map((t) => `ATLAS ${t}`)];
+      return `${i + 1}. ${r.case_id} (${r.case_name}) -- cosine similarity ${r.similarity.toFixed(3)}, family: ${r.attack_family}, tagged techniques: [${tags.join(", ") || "none"}]`;
+    })
     .join("\n");
 
   const system = [
@@ -35,7 +37,9 @@ export async function POST(request: Request) {
     "techniques or behaviors justify that, and a confidence level derived from the similarity scores",
     "you were given (do not invent your own score). Recommend one concrete next step.",
     "Ground every claim in the retrieved matches below -- do not assert a connection to a case that",
-    "is not in the list. Respond in under 180 words of plain prose, no markdown headers.",
+    "is not in the list, and only cite a technique ID that appears in that case's own 'tagged",
+    "techniques' list -- never invent or guess one. Respond in under 180 words of plain prose, no",
+    "markdown headers.",
   ].join(" ");
 
   const user = `New incident description:\n${text}\n\nTop retrieved matches:\n${matchLines}`;

@@ -13,7 +13,10 @@ export async function POST(request: Request) {
 
   let cluster;
   try {
-    cluster = await clusterCase(caseId, body?.noise_count ?? 40, body?.seed);
+    // No seed passed: the backend's fixed default keeps this identical to the
+    // /api/pool call the UI already made when the case was selected, so the
+    // "Run" step only ever reveals/narrates a pool already on screen.
+    cluster = await clusterCase(caseId, body?.noise_count ?? 40);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
@@ -21,23 +24,30 @@ export async function POST(request: Request) {
     );
   }
 
-  const alertLines = cluster.detected_cluster
-    .map((a, i) => `${i + 1}. [${a.id}] ${a.title} -- ${a.description ?? ""} (${a.why_it_matters ?? ""})`)
+  const detected = cluster.pool.filter((a) => a.in_detected_cluster);
+  const alertLines = detected
+    .map((a, i) => {
+      const tags = [...a.mitre_techniques.map((t) => `ATT&CK ${t}`), ...a.mitre_atlas_techniques.map((t) => `ATLAS ${t}`)];
+      const tagStr = tags.length ? ` [tagged: ${tags.join(", ")}]` : " [untagged]";
+      return `${i + 1}. [${a.id}]${tagStr} ${a.title} -- ${a.description ?? ""} (${a.why_it_matters ?? ""})`;
+    })
     .join("\n");
 
   const system = [
     "You are a SOC correlation assistant. You are given a set of alert fragments that an",
     "embedding-similarity model (SecureBERT) grouped together out of a much larger, unlabeled pile",
     "of alerts and background noise. You do NOT know in advance whether this grouping is correct.",
-    "Narrate the most likely attack sequence these fragments describe, in chronological/causal order",
-    "as best you can infer it, citing MITRE ATT&CK and/or MITRE ATLAS technique IDs only where an",
-    "alert's own content supports them. Give an overall risk score (0-100) and a confidence level",
-    "(Low/Medium/High) for whether this is a real, connected attack sequence versus unrelated noise",
-    "that happened to cluster together. Be direct about uncertainty if the alerts don't cohere well.",
+    "Each alert is given with a [tagged: ...] list of the ONLY MITRE ATT&CK/ATLAS technique IDs you",
+    "may cite for it -- never invent, guess, or substitute a different ID, even a plausible-sounding",
+    "one; if an alert is [untagged], do not attribute any technique ID to it. Narrate the most likely",
+    "attack sequence these fragments describe, in chronological/causal order as best you can infer it.",
+    "Give an overall risk score (0-100) and a confidence level (Low/Medium/High) for whether this is a",
+    "real, connected attack sequence versus unrelated noise that happened to cluster together. Be",
+    "direct about uncertainty if the alerts don't cohere well.",
     "Respond in under 220 words of plain prose, no markdown headers.",
   ].join(" ");
 
-  const user = `Alert fragments SecureBERT grouped into one cluster (${cluster.detected_cluster.length} of ${cluster.pool_size} total, unlabeled pile):\n\n${alertLines}`;
+  const user = `Alert fragments SecureBERT grouped into one cluster (${detected.length} of ${cluster.pool_size} total, unlabeled pile):\n\n${alertLines}`;
 
   let narrative = "";
   try {

@@ -62,14 +62,24 @@ def retrieve(query_vector, k: int = 3):
     return scored[:k]
 
 
+# Fixed rather than random: the UI shows the whole pool as a table before and
+# after clustering, so the same case must sample the same 47-item haystack every
+# time -- a reshuffled pool on every click would make the table feel broken, not
+# fresh. Verified across seeds earlier (experiment_clustering.py); 7 is simply the
+# one already spot-checked live for every case.
+DEFAULT_SEED = 7
+
+
 def cluster(case_id: str, noise_count: int = 40, seed: int | None = None):
     _, alert_pool = _load()
     real = [a for a in alert_pool if a["ground_truth"] == case_id]
     if not real:
         raise ValueError(f"unknown case_id: {case_id}")
 
+    effective_seed = seed if seed is not None else DEFAULT_SEED
+
     noise_all = [a for a in alert_pool if a["ground_truth"] == "noise"]
-    rng = random.Random(seed)
+    rng = random.Random(effective_seed)
     noise_sample = rng.sample(noise_all, min(noise_count, len(noise_all)))
 
     combined = real + noise_sample
@@ -87,40 +97,41 @@ def cluster(case_id: str, noise_count: int = 40, seed: int | None = None):
     std = vectors.std(axis=0, keepdims=True)
     standardized = (vectors - mean) / np.clip(std, 1e-6, None)
 
-    km = KMeans(n_clusters=2, n_init=10, random_state=seed if seed is not None else 0)
+    km = KMeans(n_clusters=2, n_init=10, random_state=effective_seed)
     labels = km.fit_predict(standardized)
 
     counts = np.bincount(labels, minlength=2)
     signal_label = int(np.argmin(counts))  # smaller cluster = candidate attack sequence
-
-    detected, excluded = [], []
-    for item, label in zip(combined, labels):
-        (detected if label == signal_label else excluded).append(item)
+    detected_ids = {item["id"] for item, label in zip(combined, labels) if label == signal_label}
 
     real_ids = {a["id"] for a in real}
-    detected_ids = {a["id"] for a in detected}
     correctly_grouped = len(real_ids & detected_ids)
-    noise_in_detected = sum(1 for a in detected if a["ground_truth"] == "noise")
+    noise_in_detected = sum(1 for a in combined if a["id"] in detected_ids and a["ground_truth"] == "noise")
 
-    light = lambda a: {"id": a["id"], "title": a["title"], "ground_truth": a["ground_truth"]}  # noqa: E731
-    full = lambda a: {  # noqa: E731
-        "id": a["id"],
-        "title": a["title"],
-        "description": a.get("description"),
-        "why_it_matters": a.get("why_it_matters"),
-        "mitre_techniques": a.get("mitre_techniques", []),
-        "mitre_atlas_techniques": a.get("mitre_atlas_techniques", []),
-        "risk_score": a.get("risk_score"),
-        "ground_truth": a["ground_truth"],
-    }
+    def pool_item(a):
+        return {
+            "id": a["id"],
+            "title": a["title"],
+            "source": a.get("source"),
+            "category": a.get("category"),
+            "severity": a.get("severity"),
+            "time": a.get("time"),
+            "description": a.get("description"),
+            "why_it_matters": a.get("why_it_matters"),
+            "mitre_techniques": a.get("mitre_techniques", []),
+            "mitre_atlas_techniques": a.get("mitre_atlas_techniques", []),
+            "risk_score": a.get("risk_score"),
+            "ground_truth": a["ground_truth"],
+            "in_detected_cluster": a["id"] in detected_ids,
+        }
 
     return {
         "case_id": case_id,
         "pool_size": len(combined),
         "real_alert_count": len(real),
         "noise_count": len(noise_sample),
-        "detected_cluster": [full(a) for a in detected],
-        "excluded": [light(a) for a in excluded],
+        "detected_count": len(detected_ids),
+        "pool": [pool_item(a) for a in combined],
         "ground_truth_reveal": {
             "real_alerts_in_case": len(real_ids),
             "correctly_grouped": correctly_grouped,

@@ -98,9 +98,9 @@ export function WakeBanner({ state }: { state: WakeState }) {
           <>
             <span className="font-medium">Waking up the SecureBERT model service.</span> It runs on a
             free Render instance that sleeps when idle -- the first request after a while can take up
-            to a minute. This has nothing to do with Groq or the correlation itself; once it's awake,
-            everything below responds normally. Feel free to click a button now, it'll just wait a bit
-            longer this one time.
+            to a minute. This has nothing to do with Groq or the correlation itself; once it&rsquo;s
+            awake, everything below responds normally. Feel free to click a button now, it&rsquo;ll
+            just wait a bit longer this one time.
           </>
         )}
       </p>

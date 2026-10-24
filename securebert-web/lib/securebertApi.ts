@@ -29,14 +29,20 @@ export async function retrieveCases(text: string, k = 3): Promise<RetrieveResult
   return data.results as RetrieveResult[];
 }
 
-export type ClusterItemLight = { id: string; title: string; ground_truth: string };
-
-export type ClusterItemFull = ClusterItemLight & {
+export type PoolItem = {
+  id: string;
+  title: string;
+  source: string | null;
+  category: string | null;
+  severity: string | null;
+  time: string | null;
   description: string | null;
   why_it_matters: string | null;
   mitre_techniques: string[];
   mitre_atlas_techniques: string[];
   risk_score: number | null;
+  ground_truth: string; // case_id this fragment really belongs to, or "noise"
+  in_detected_cluster: boolean;
 };
 
 export type ClusterResult = {
@@ -44,8 +50,8 @@ export type ClusterResult = {
   pool_size: number;
   real_alert_count: number;
   noise_count: number;
-  detected_cluster: ClusterItemFull[];
-  excluded: ClusterItemLight[];
+  detected_count: number;
+  pool: PoolItem[];
   ground_truth_reveal: {
     real_alerts_in_case: number;
     correctly_grouped: number;
