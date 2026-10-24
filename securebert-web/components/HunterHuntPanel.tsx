@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Panel, PrimaryButton, ErrorNote, ColdStartNote, FamilyBadge, FrameworkBadges } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, loadingLabelFor } from "./ui";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
 const SAMPLES = [
@@ -10,7 +10,7 @@ const SAMPLES = [
   "Someone may be running systematic queries against our public inference API to clone the model.",
 ];
 
-export default function HunterHuntPanel() {
+export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
   const [hypothesis, setHypothesis] = useState(SAMPLES[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,11 +60,10 @@ export default function HunterHuntPanel() {
         className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
       />
       <div className="mt-3">
-        <PrimaryButton onClick={run} loading={loading}>
+        <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
           Build hunt plan
         </PrimaryButton>
       </div>
-      <ColdStartNote />
       {error && <ErrorNote message={error} />}
 
       {result && (

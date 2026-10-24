@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Panel, PrimaryButton, ErrorNote, ColdStartNote, FamilyBadge, FrameworkBadges } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, loadingLabelFor } from "./ui";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
 const SAMPLE =
   "A finance ops copilot resolved a routine ticket, but our logs show it also pulled a full customer export and emailed it to a domain we've never corresponded with before. The visible ticket only asked for a password reset.";
 
-export default function AnalystRetrievePanel() {
+export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean }) {
   const [text, setText] = useState(SAMPLE);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +46,10 @@ export default function AnalystRetrievePanel() {
         className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
       />
       <div className="mt-3">
-        <PrimaryButton onClick={run} loading={loading}>
+        <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
           Find precedent
         </PrimaryButton>
       </div>
-      <ColdStartNote />
       {error && <ErrorNote message={error} />}
 
       {result && (

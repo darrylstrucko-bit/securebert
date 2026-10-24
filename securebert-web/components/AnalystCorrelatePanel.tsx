@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Panel, FamilyBadge, PrimaryButton, ErrorNote, ColdStartNote, FrameworkBadges } from "./ui";
+import { Panel, FamilyBadge, PrimaryButton, ErrorNote, FrameworkBadges, loadingLabelFor } from "./ui";
 import type { ClusterResult } from "@/lib/securebertApi";
 
 type CaseOption = { case_id: string; case_name: string; attack_family: string };
 
-export default function AnalystCorrelatePanel() {
+export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolean }) {
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [caseId, setCaseId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -69,11 +69,10 @@ export default function AnalystCorrelatePanel() {
           ))}
         </select>
         {selected && <FamilyBadge family={selected.attack_family} />}
-        <PrimaryButton onClick={run} loading={loading}>
+        <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
           Run correlation
         </PrimaryButton>
       </div>
-      <ColdStartNote />
       {error && <ErrorNote message={error} />}
 
       {result && (
