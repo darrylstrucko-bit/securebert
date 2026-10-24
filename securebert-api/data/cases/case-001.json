@@ -1,0 +1,175 @@
+{
+  "case_id": "CASE-001",
+  "case_name": "LOTL PowerShell + Credential Theft + Lateral Movement",
+  "scenario_type": "Suspicious PowerShell + Credential Theft + Lateral Movement",
+  "attack_family": "classic",
+  "source": "Adapted from AIA case-001_lotl-powershell-credential-theft.json",
+  "investigation_objective": "Determine whether suspicious PowerShell execution on a finance workstation is benign activity, a false positive, or active credential theft and lateral movement requiring Tier 2 escalation.",
+  "likely_adversary_objective": {
+    "summary": "Credential Theft -> Privilege Escalation -> Lateral Movement -> Persistence",
+    "attack_style": "Living-off-the-Land",
+    "tools_or_techniques": ["PowerShell", "SMB", "Scheduled Tasks", "Valid Accounts", "Native Windows administration tools"]
+  },
+  "alerts": [
+    {
+      "alert_id": "ALERT-001",
+      "title": "Suspicious Encoded PowerShell Execution",
+      "source": "EDR",
+      "severity": "High",
+      "time": "08:55",
+      "host": "FIN-WS-247",
+      "user": "oioane",
+      "category": "Execution",
+      "description": "PowerShell executed with a Base64-encoded command from a Microsoft Word parent process.",
+      "evidence": ["Parent process: WINWORD.EXE", "Child process: powershell.exe", "Command line includes encoded command flag", "Execution occurred in interactive user session"],
+      "why_it_matters": "Encoded PowerShell launched from Word is commonly associated with phishing payload execution and Living-off-the-Land attack behavior.",
+      "mitre_techniques": ["T1059.001"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 82
+    },
+    {
+      "alert_id": "ALERT-002",
+      "title": "Impossible Travel Login",
+      "source": "Identity Provider",
+      "severity": "Medium",
+      "time": "08:12",
+      "host": null,
+      "user": "oioane",
+      "category": "Identity",
+      "description": "User authenticated from a Singapore IP address shortly after normal login activity from Virginia.",
+      "evidence": ["Previous login location: Virginia", "Current login location: Singapore", "Travel time between locations is not physically possible", "User has no historical login activity from Singapore"],
+      "why_it_matters": "This may indicate credential compromise or session hijacking.",
+      "mitre_techniques": ["T1078"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 68
+    },
+    {
+      "alert_id": "ALERT-003",
+      "title": "MFA Failures Followed by Successful Login",
+      "source": "Identity Provider",
+      "severity": "Medium",
+      "time": "08:14",
+      "host": null,
+      "user": "oioane",
+      "category": "Identity",
+      "description": "Multiple MFA failures were followed by a successful authentication event.",
+      "evidence": ["3 MFA failures within 2 minutes", "Successful authentication immediately after failures", "Login originated from unusual geography", "No prior MFA failure pattern for this user"],
+      "why_it_matters": "Repeated MFA failures followed by success may indicate attacker persistence, MFA fatigue, or compromised authentication factors.",
+      "mitre_techniques": ["T1078"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 71
+    },
+    {
+      "alert_id": "ALERT-004",
+      "title": "User Added to Domain Admins",
+      "source": "Active Directory",
+      "severity": "Critical",
+      "time": "08:19",
+      "host": "DC-01",
+      "user": "oioane",
+      "category": "Privilege Escalation",
+      "description": "User account was added to the Domain Admins group.",
+      "evidence": ["Group modified: Domain Admins", "Added account: oioane", "Change occurred shortly after anomalous login", "No approved change ticket found"],
+      "why_it_matters": "Unexpected privileged group membership is a major escalation indicator and increases blast radius.",
+      "mitre_techniques": ["T1078"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 95
+    },
+    {
+      "alert_id": "ALERT-005",
+      "title": "LSASS Memory Access Attempt",
+      "source": "EDR",
+      "severity": "High",
+      "time": "08:31",
+      "host": "FIN-WS-247",
+      "user": "oioane",
+      "category": "Credential Access",
+      "description": "Suspicious process attempted to access LSASS memory.",
+      "evidence": ["Target process: lsass.exe", "Suspicious process chain observed", "Credential access behavior detected", "Activity followed encoded PowerShell execution"],
+      "why_it_matters": "Access to LSASS memory is commonly associated with credential dumping.",
+      "mitre_techniques": ["T1003.001"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 90
+    },
+    {
+      "alert_id": "ALERT-006",
+      "title": "Rare Domain DNS Query",
+      "source": "DNS / Proxy",
+      "severity": "Medium",
+      "time": "08:36",
+      "host": "FIN-WS-247",
+      "user": "oioane",
+      "category": "Command and Control",
+      "description": "Host queried a rare external domain not previously seen in the environment.",
+      "evidence": ["Domain: finance-app-sync[.]com", "First seen internally today", "Low reputation score", "Queried shortly after suspicious PowerShell execution"],
+      "why_it_matters": "Rare external domains following suspicious execution may indicate command-and-control activity.",
+      "mitre_techniques": ["T1071.004"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 76
+    },
+    {
+      "alert_id": "ALERT-007",
+      "title": "Abnormal SMB Lateral Movement",
+      "source": "Windows Logs",
+      "severity": "High",
+      "time": "08:42",
+      "host": "FIN-WS-247",
+      "user": "oioane",
+      "category": "Lateral Movement",
+      "description": "User initiated SMB authentications to multiple internal servers within a short window.",
+      "evidence": ["SMB connection to APP-SRV-12", "SMB connection to DB-SRV-03", "SMB connection to FS-SRV-08", "User does not normally access these systems"],
+      "why_it_matters": "SMB fanout from a workstation after credential access activity may indicate lateral movement.",
+      "mitre_techniques": ["T1021.002"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 88
+    },
+    {
+      "alert_id": "ALERT-008",
+      "title": "Remote Scheduled Task Created",
+      "source": "EDR / Windows Events",
+      "severity": "High",
+      "time": "08:49",
+      "host": "APP-SRV-12",
+      "user": "oioane",
+      "category": "Persistence",
+      "description": "A scheduled task was created remotely on an internal application server.",
+      "evidence": ["Target host: APP-SRV-12", "Task created remotely", "Created after SMB lateral movement", "No matching maintenance window"],
+      "why_it_matters": "Remote scheduled task creation is commonly used for persistence and remote execution.",
+      "mitre_techniques": ["T1053.005"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 86
+    }
+  ],
+  "threat_context": {
+    "threat_summary": "The observed chain maps to multiple MITRE ATT&CK tactics and resembles real attacker behavior: execution, privilege escalation, credential access, C2, lateral movement, and persistence.",
+    "mitre_attack_mapping": [
+      {"tactic": "Initial Access", "technique_id": "T1566.001", "technique_name": "Spearphishing Attachment", "observed_evidence": ["Word document launched from Downloads before PowerShell execution"], "confidence": "Medium"},
+      {"tactic": "Execution", "technique_id": "T1059.001", "technique_name": "PowerShell", "observed_evidence": ["Encoded PowerShell launched by WINWORD.EXE"], "confidence": "High"},
+      {"tactic": "Privilege Escalation", "technique_id": "T1078", "technique_name": "Valid Accounts", "observed_evidence": ["User added to Domain Admins after anomalous authentication"], "confidence": "High"},
+      {"tactic": "Credential Access", "technique_id": "T1003.001", "technique_name": "LSASS Memory", "observed_evidence": ["Process attempted LSASS memory access"], "confidence": "High"},
+      {"tactic": "Lateral Movement", "technique_id": "T1021.002", "technique_name": "SMB/Windows Admin Shares", "observed_evidence": ["SMB connections to APP-SRV-12, DB-SRV-03, and FS-SRV-08"], "confidence": "High"},
+      {"tactic": "Persistence", "technique_id": "T1053.005", "technique_name": "Scheduled Task/Job: Scheduled Task", "observed_evidence": ["Remote scheduled task created on APP-SRV-12"], "confidence": "High"}
+    ],
+    "mitre_atlas_mapping": []
+  },
+  "detection_recommendation": {
+    "detection_goal": "Detect encoded PowerShell launched from Microsoft Office followed by privileged account change, LSASS access, SMB lateral movement, or remote scheduled task creation within 30 minutes.",
+    "sigma_rule": {
+      "title": "Office Spawned Encoded PowerShell With Post-Execution Compromise Signals",
+      "id": "0c9485a7-7c6d-4e5e-9e0e-8b3d18a5a901",
+      "status": "experimental",
+      "logsource": {"product": "windows", "category": "process_creation"},
+      "detection": {
+        "selection_office_parent": {"ParentImage|endswith": ["\\WINWORD.EXE", "\\EXCEL.EXE", "\\POWERPNT.EXE", "\\OUTLOOK.EXE"]},
+        "selection_powershell": {"Image|endswith": "\\powershell.exe", "CommandLine|contains": ["-EncodedCommand", "-enc", "ExecutionPolicy Bypass"]},
+        "condition": "selection_office_parent and selection_powershell"
+      },
+      "level": "high",
+      "tags": ["attack.execution", "attack.t1059.001", "attack.defense_evasion", "attack.lotl"]
+    },
+    "tuning_recommendations": [
+      "Suppress only when an approved change ticket or signed internal automation package is present.",
+      "Increase severity when user is newly added to a privileged group within 30 minutes."
+    ]
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "case_id": "CASE-AI-02",
+  "case_name": "Inference API Abuse -> Model Extraction and Training-Data Probing",
+  "scenario_type": "High-Volume Systematic Querying of a Public ML Inference Endpoint",
+  "attack_family": "ai_attack",
+  "source": "Newly authored for securebert-aia-correlation demo corpus",
+  "investigation_objective": "Determine whether unusual query patterns against the company's public fraud-scoring inference API reflect a legitimate integration partner, a misconfigured internal job, or an attacker attempting to extract/clone the proprietary model and probe for memorized training data.",
+  "likely_adversary_objective": {
+    "summary": "Reconstruct a functional clone of a proprietary ML model through systematic API querying, and probe for leakage of memorized training data, without ever touching the hosting infrastructure directly.",
+    "attack_style": "Black-box model extraction / membership inference via public inference API",
+    "tools_or_techniques": ["Scripted high-volume API querying", "Systematic input-space sweeping", "Membership inference probing"]
+  },
+  "alerts": [
+    {
+      "alert_id": "ALERT-AI201",
+      "title": "Anomalous Query Volume from Single API Key",
+      "source": "API Gateway",
+      "severity": "High",
+      "time": "14:02",
+      "host": "api-gw-fraud-score-03",
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Discovery",
+      "description": "A single API key issued a query volume 40x above its historical peak within a 2-hour window.",
+      "evidence": ["Queries: 186,400 in 2 hours vs. 90-day peak of 4,100/day", "Key was provisioned for a low-volume sandbox integration", "Requests originated from a narrow IP range not matching the partner's registered egress", "No corresponding support/integration ticket for a volume increase"],
+      "why_it_matters": "A 40x volume spike on a sandbox key with no change request is the first sign of automated, non-organic querying.",
+      "mitre_techniques": ["T1190"],
+      "mitre_atlas_techniques": ["AML.T0040"],
+      "risk_score": 78
+    },
+    {
+      "alert_id": "ALERT-AI202",
+      "title": "Systematic Input-Space Sweep Pattern Detected",
+      "source": "ML Inference Monitoring",
+      "severity": "High",
+      "time": "14:05",
+      "host": "api-gw-fraud-score-03",
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Discovery",
+      "description": "Query inputs followed a dense, systematic sweep across the model's feature space rather than resembling organic transaction data.",
+      "evidence": ["Feature vectors show near-uniform grid coverage across 6 input dimensions", "Real transaction traffic does not exhibit this distribution", "Query diversity metric is 97th percentile vs. a near-zero baseline for legitimate partners", "Pattern consistent with surrogate-model training data generation"],
+      "why_it_matters": "This querying pattern is consistent with an attacker systematically sampling a model's decision boundary to train a surrogate (cloned) model that mimics its behavior.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0040", "AML.T0024.002"],
+      "risk_score": 88
+    },
+    {
+      "alert_id": "ALERT-AI203",
+      "title": "High-Confidence-Score Query Clustering Near Decision Boundary",
+      "source": "ML Inference Monitoring",
+      "severity": "Medium",
+      "time": "14:09",
+      "host": "api-gw-fraud-score-03",
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Discovery",
+      "description": "A disproportionate share of queries cluster near the model's decision threshold rather than reflecting the real-world class distribution.",
+      "evidence": ["38% of queries scored within +/-0.03 of the decision threshold", "Production transaction traffic shows under 2% of queries in this band", "Boundary-focused sampling is a recognized technique for refining a cloned model's decision surface"],
+      "why_it_matters": "Legitimate transaction traffic does not cluster around a model's decision boundary; an attacker refining a clone does.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0024.002"],
+      "risk_score": 80
+    },
+    {
+      "alert_id": "ALERT-AI204",
+      "title": "Repeated Near-Duplicate Queries With Single-Field Perturbation",
+      "source": "ML Inference Monitoring",
+      "severity": "Medium",
+      "time": "14:11",
+      "host": "api-gw-fraud-score-03",
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Discovery",
+      "description": "Many queries differ from a prior query by exactly one perturbed field, consistent with sensitivity probing of individual features.",
+      "evidence": ["1,240 query pairs differ by a single field value", "Perturbation step sizes are uniform and systematic, not representative of organic transactions", "Pattern matches known feature-sensitivity probing methodology"],
+      "why_it_matters": "Systematic single-field perturbation is a textbook step in reverse-engineering a model's feature sensitivities.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0040"],
+      "risk_score": 74
+    },
+    {
+      "alert_id": "ALERT-AI205",
+      "title": "Queries Resembling Known Training-Set Record Shapes",
+      "source": "ML Inference Monitoring / Data Science Team",
+      "severity": "High",
+      "time": "14:16",
+      "host": "api-gw-fraud-score-03",
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Collection",
+      "description": "A subset of query inputs closely match the statistical shape of records known to exist in the model's original training set, consistent with a membership-inference probe for training-data leakage.",
+      "evidence": ["212 queries match training-record statistical fingerprints at over 90% similarity", "Legitimate partner traffic has no access to or knowledge of training data composition", "Membership-inference probing can reveal whether specific records were used in training, a data-privacy exposure"],
+      "why_it_matters": "This goes beyond cloning model behavior and probes whether specific real records were memorized -- a direct privacy exposure.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0024"],
+      "risk_score": 83
+    },
+    {
+      "alert_id": "ALERT-AI206",
+      "title": "Partner Integration Key Used Outside Registered IP Range",
+      "source": "API Gateway / IAM",
+      "severity": "Medium",
+      "time": "14:02",
+      "host": null,
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Initial Access",
+      "description": "The sandbox API key was used from IP ranges not matching the partner's registered egress addresses on file.",
+      "evidence": ["Registered egress: single /28 block in us-east", "Observed source: distributed across 14 IPs in 3 different cloud provider ranges", "No IP allowlist change request on file"],
+      "why_it_matters": "A legitimately-issued key used from unregistered, distributed infrastructure suggests the key itself was repurposed by someone other than the partner.",
+      "mitre_techniques": ["T1190"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 70
+    },
+    {
+      "alert_id": "ALERT-AI207",
+      "title": "Billing/Cost Anomaly on Inference Compute",
+      "source": "Cloud Cost Monitoring",
+      "severity": "Low",
+      "time": "16:00",
+      "host": null,
+      "user": "api-key-partner-sandbox-7f2c",
+      "category": "Impact",
+      "description": "Inference compute costs attributable to this API key spiked sharply, consistent with sustained high-volume querying.",
+      "evidence": ["Inference compute cost 23x daily average attributable to this key", "Cost spike time-aligned with the query-volume anomaly", "No corresponding increase in legitimate transaction volume from the partner"],
+      "why_it_matters": "Beyond IP theft risk, sustained extraction-style querying against a paid inference endpoint also creates a direct, measurable cost impact.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0040"],
+      "risk_score": 40
+    }
+  ],
+  "threat_context": {
+    "threat_summary": "No system was breached and no credential was stolen. A single low-volume sandbox API key was used to run a systematic, high-density sweep against the production fraud-scoring inference endpoint consistent with black-box model extraction and membership-inference probing of the training set -- the entire attack surface here is the model's own public prediction interface.",
+    "mitre_attack_mapping": [
+      {"tactic": "Initial Access", "technique_id": "T1190", "technique_name": "Exploit Public-Facing Application", "observed_evidence": ["Abused a legitimately-issued but narrowly-scoped sandbox API key from unregistered IP ranges"], "confidence": "Medium"},
+      {"tactic": "Command and Control", "technique_id": "T1071.001", "technique_name": "Application Layer Protocol: Web Protocols", "observed_evidence": ["Scripted querying conducted entirely over ordinary HTTPS API calls, indistinguishable at the network layer from normal partner traffic"], "confidence": "Medium"}
+    ],
+    "mitre_atlas_mapping": [
+      {"tactic": "AI Model Access", "technique_id": "AML.T0040", "technique_name": "AI Model Inference API Access", "observed_evidence": ["186,400 queries in 2 hours via a public inference endpoint"], "confidence": "High"},
+      {"tactic": "Exfiltration", "technique_id": "AML.T0024", "technique_name": "Exfiltration via AI Inference API", "observed_evidence": ["Query patterns consistent with training-data membership-inference probing"], "confidence": "Medium"},
+      {"tactic": "Exfiltration", "technique_id": "AML.T0024.002", "technique_name": "Exfiltration via AI Inference API: Extract AI Model", "observed_evidence": ["Systematic feature-space sweep and decision-boundary clustering consistent with surrogate model extraction"], "confidence": "High"}
+    ]
+  },
+  "detection_recommendation": {
+    "detection_goal": "Detect model-extraction-style querying against a public inference API by combining volume anomaly, input-space sweep patterns, and decision-boundary clustering.",
+    "sigma_rule": {
+      "title": "ML Inference API Model Extraction Pattern",
+      "id": "case-ai-02-inference-api-model-extraction",
+      "status": "experimental",
+      "logsource": {"product": "ml_inference_gateway", "category": "api_request"},
+      "detection": {
+        "selection_volume": {"queries_per_key_per_hour|gt": 10000},
+        "selection_boundary_clustering": {"pct_queries_near_decision_threshold|gt": 0.2},
+        "condition": "selection_volume and selection_boundary_clustering"
+      },
+      "level": "high",
+      "tags": ["atlas.ai_model_access", "atlas.aml.t0040", "atlas.exfiltration", "atlas.aml.t0024.002", "model_theft"]
+    },
+    "tuning_recommendations": [
+      "Baseline per-key query volume and input diversity individually -- a fixed global threshold misses low-and-slow extraction attempts.",
+      "Flag decision-boundary clustering and single-field perturbation sweeps even at moderate volume; these are stronger extraction signals than raw request count alone."
+    ]
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "case_id": "CASE-AI-01",
+  "case_name": "Indirect Prompt Injection -> Agentic Data Exfiltration",
+  "scenario_type": "AI Support Copilot Hijacked via Hidden Instructions in Inbound Ticket",
+  "attack_family": "ai_attack",
+  "source": "Newly authored for securebert-aia-correlation demo corpus",
+  "investigation_objective": "Determine whether an AI support copilot's unusual tool-use and outbound email activity reflects a normal (if unusual) support resolution, or a successful indirect prompt-injection attack that hijacked the agent into exfiltrating customer data.",
+  "likely_adversary_objective": {
+    "summary": "Use a legitimate AI agent's own tool access and trust boundary to exfiltrate sensitive data without directly compromising any credential or endpoint.",
+    "attack_style": "Indirect prompt injection / agentic tool abuse",
+    "tools_or_techniques": ["Hidden instruction payload in untrusted content", "Legitimate agent tool invocation", "Email as covert exfiltration channel"]
+  },
+  "alerts": [
+    {
+      "alert_id": "ALERT-AI101",
+      "title": "Hidden Instruction Block Detected in Inbound Support Ticket",
+      "source": "Content Security Filter / Email Gateway",
+      "severity": "High",
+      "time": "09:14",
+      "host": "support-portal-ingest-02",
+      "user": "ticket-48213-external-submitter",
+      "category": "Initial Access",
+      "description": "An inbound support ticket contained a hidden instruction block disguised as near-invisible text layered beneath the visible customer message.",
+      "evidence": ["Hidden text block found via HTML/CSS diff scan", "Instructions directed an AI assistant to retrieve and forward account records", "Visible ticket text only requested a password reset", "Submitter domain not previously associated with this account"],
+      "why_it_matters": "A hidden instruction block in otherwise-ordinary content is the defining signature of an indirect prompt injection attempt against anything that reads this ticket with an LLM.",
+      "mitre_techniques": ["T1566"],
+      "mitre_atlas_techniques": ["AML.T0051.001"],
+      "risk_score": 70
+    },
+    {
+      "alert_id": "ALERT-AI102",
+      "title": "Agent Tool Invocation Mismatch",
+      "source": "AI Agent Observability Platform",
+      "severity": "High",
+      "time": "09:16",
+      "host": "concierge-ai-agent-07",
+      "user": "svc-concierge-agent",
+      "category": "Execution",
+      "description": "The support copilot invoked export_account_records and send_email tools despite the ticket's visible request being a simple password reset.",
+      "evidence": ["Ticket category: Password Reset", "Tools called: export_account_records, send_email", "No password-reset tool was called", "Tool call sequence deviates from the agent's documented password-reset playbook"],
+      "why_it_matters": "Tool invocations that don't match the stated user request are a strong signal the agent is following instructions from somewhere other than the visible ticket text.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0053"],
+      "risk_score": 85
+    },
+    {
+      "alert_id": "ALERT-AI103",
+      "title": "Outbound Email to Newly-Seen External Domain",
+      "source": "Email Security / DLP",
+      "severity": "High",
+      "time": "09:17",
+      "host": null,
+      "user": "svc-concierge-agent",
+      "category": "Exfiltration",
+      "description": "The agent sent an email containing an account-records export to a domain never previously seen corresponding with this account.",
+      "evidence": ["Destination domain: acct-support-relay[.]net", "Attachment: account_export_48213.csv", "Domain registered 11 days prior", "No prior correspondence from this account to this domain"],
+      "why_it_matters": "A newly-registered destination domain receiving a bulk data export is a strong exfiltration indicator regardless of how the send was triggered.",
+      "mitre_techniques": ["T1048.003"],
+      "mitre_atlas_techniques": ["AML.T0086"],
+      "risk_score": 91
+    },
+    {
+      "alert_id": "ALERT-AI104",
+      "title": "Agent Session Correlated to Prior Low-Severity Injection Attempt",
+      "source": "AI Agent Observability Platform",
+      "severity": "Medium",
+      "time": "09:14",
+      "host": "concierge-ai-agent-07",
+      "user": "svc-concierge-agent",
+      "category": "Defense Evasion",
+      "description": "Automated content filtering had previously flagged, but not blocked, a similar hidden-instruction pattern from the same submitter domain nine days earlier.",
+      "evidence": ["Prior ticket #44110 flagged for suspicious embedded text", "Same external domain used in both tickets", "Prior flag was reviewed and dismissed as a false positive", "No blocklist entry was created after the prior review"],
+      "why_it_matters": "A dismissed near-miss nine days earlier from the same domain suggests reconnaissance before this attempt, not a one-off.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0051.001"],
+      "risk_score": 58
+    },
+    {
+      "alert_id": "ALERT-AI105",
+      "title": "Over-Scoped Tool Permission Flagged",
+      "source": "AI Agent Governance / IAM",
+      "severity": "Medium",
+      "time": "09:16",
+      "host": "concierge-ai-agent-07",
+      "user": "svc-concierge-agent",
+      "category": "Privilege Context",
+      "description": "The support copilot's service identity holds standing access to the full account-records export tool, a scope broader than its documented password-reset and basic-inquiry use cases require.",
+      "evidence": ["Agent role: concierge-support-agent", "Granted tool scope includes export_account_records", "Scope review shows no documented business justification for export access", "90% of the agent's historical tool calls never use export_account_records"],
+      "why_it_matters": "An over-scoped tool grant is what made this agent exploitable at all -- the injection alone wouldn't have mattered without standing export access.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0053"],
+      "risk_score": 55
+    },
+    {
+      "alert_id": "ALERT-AI106",
+      "title": "Unexpected CC Field Added by Agent",
+      "source": "Ticketing Platform Audit Log",
+      "severity": "Medium",
+      "time": "09:17",
+      "host": null,
+      "user": "svc-concierge-agent",
+      "category": "Collection",
+      "description": "The agent added an external address to the ticket's CC field without a corresponding instruction visible in the customer-facing ticket text.",
+      "evidence": ["CC address: relay-notify@acct-support-relay[.]net", "No visible customer request to CC this address", "Field added programmatically by the agent's own action", "Address matches the domain used for the outbound export email"],
+      "why_it_matters": "This is the clearest audit trail that the agent acted on the hidden instruction rather than the visible ticket text.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0051.001", "AML.T0053"],
+      "risk_score": 80
+    },
+    {
+      "alert_id": "ALERT-AI107",
+      "title": "Customer PII Volume Threshold Exceeded in Outbound Message",
+      "source": "DLP",
+      "severity": "High",
+      "time": "09:17",
+      "host": null,
+      "user": "svc-concierge-agent",
+      "category": "Exfiltration",
+      "description": "The outbound attachment contained a volume and density of PII fields far exceeding what a password-reset confirmation would normally include.",
+      "evidence": ["214 customer records detected in attachment", "Fields included: full name, account number, billing address, phone", "Password-reset confirmations normally contain zero customer PII records", "DLP policy for bulk PII in outbound mail triggered post-send"],
+      "why_it_matters": "The gap between the stated task (a password reset) and the actual payload (214 customer records) is the clearest measure of how far the hijack went.",
+      "mitre_techniques": ["T1048.003"],
+      "mitre_atlas_techniques": ["AML.T0086"],
+      "risk_score": 89
+    }
+  ],
+  "threat_context": {
+    "threat_summary": "This sequence involves no compromised credential and no exploited software vulnerability. A hidden instruction block embedded in ordinary-looking support-ticket content was sufficient to redirect a trusted, already-authorized AI agent into exporting and emailing sensitive customer records to an external, newly-registered domain -- demonstrating that an AI agent's own standing tool access is itself an exploitable attack surface.",
+    "mitre_attack_mapping": [
+      {"tactic": "Initial Access", "technique_id": "T1566", "technique_name": "Phishing", "observed_evidence": ["Hidden instruction payload delivered through an ordinary-looking inbound support ticket"], "confidence": "Medium"},
+      {"tactic": "Exfiltration", "technique_id": "T1048.003", "technique_name": "Exfiltration Over Unencrypted Non-C2 Protocol", "observed_evidence": ["Account export emailed via SMTP to a newly-registered external domain"], "confidence": "High"}
+    ],
+    "mitre_atlas_mapping": [
+      {"tactic": "Execution", "technique_id": "AML.T0051.001", "technique_name": "LLM Prompt Injection: Indirect", "observed_evidence": ["Hidden instruction block embedded in ticket content redirected the agent's behavior"], "confidence": "High"},
+      {"tactic": "Execution / Privilege Escalation / Lateral Movement", "technique_id": "AML.T0053", "technique_name": "AI Agent Tool Invocation", "observed_evidence": ["Agent invoked export_account_records and send_email tools outside its documented password-reset playbook"], "confidence": "High"},
+      {"tactic": "Exfiltration", "technique_id": "AML.T0086", "technique_name": "Exfiltration via AI Agent Tool Invocation", "observed_evidence": ["Agent used its own email-sending tool to move 214 customer records to an external domain"], "confidence": "High"}
+    ]
+  },
+  "detection_recommendation": {
+    "detection_goal": "Detect AI agent tool invocations that are inconsistent with the classified intent of the inbound request, especially when followed by an outbound communication to a newly-seen external domain.",
+    "sigma_rule": {
+      "title": "AI Agent Tool-Intent Mismatch Followed by External Communication",
+      "id": "case-ai-01-agent-tool-intent-mismatch",
+      "status": "experimental",
+      "logsource": {"product": "ai_agent_platform", "category": "tool_invocation"},
+      "detection": {
+        "selection_intent_mismatch": {"ticket_category": "password_reset", "tool_called": ["export_account_records", "send_email"]},
+        "selection_new_domain": {"destination_domain_age_days|lt": 30},
+        "condition": "selection_intent_mismatch and selection_new_domain"
+      },
+      "level": "high",
+      "tags": ["atlas.execution", "atlas.aml.t0051.001", "atlas.exfiltration", "atlas.aml.t0086", "ai_agent_abuse"]
+    },
+    "tuning_recommendations": [
+      "Classify ticket intent independently of the agent's own tool-selection reasoning, then diff the two before allowing high-risk tools (export, send) to fire.",
+      "Require a second signal (e.g. a newly-registered destination domain, or bulk-PII volume) before auto-blocking, to avoid false positives on legitimate escalations."
+    ]
+  }
+}

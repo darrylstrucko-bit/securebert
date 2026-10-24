@@ -1,0 +1,159 @@
+{
+  "case_id": "CASE-005",
+  "case_name": "Ransomware Pre-Staging + Backup Tampering",
+  "scenario_type": "Compromised Admin + Defense Evasion + Backup Tampering + Encryption Staging",
+  "attack_family": "classic",
+  "source": "Adapted from AIA case-005_ransomware-prestaging-backup-tampering.json",
+  "investigation_objective": "Determine whether suspicious administrative activity across file servers represents approved maintenance or active ransomware pre-staging requiring immediate escalation and containment.",
+  "likely_adversary_objective": {
+    "summary": "Prepare for broad ransomware encryption by disabling defenses, impairing recovery, staging payloads, and testing file rename behavior.",
+    "attack_style": "Human-operated ransomware pre-staging",
+    "tools_or_techniques": ["Valid Accounts", "EDR disablement", "vssadmin shadow copy deletion", "Backup retention tampering", "SMB ADMIN$ fanout", "Suspicious binary staging", "File rename/encryption testing"]
+  },
+  "alerts": [
+    {
+      "alert_id": "ALERT-501",
+      "title": "Mass Shadow Copy Deletion",
+      "source": "EDR / Windows Events",
+      "severity": "Critical",
+      "time": "03:12",
+      "host": "FS-SRV-14",
+      "user": "svc-backup-admin",
+      "category": "Impact",
+      "description": "Shadow copies were deleted on a production file server using vssadmin.exe.",
+      "evidence": ["Command: vssadmin.exe delete shadows /all /quiet", "Parent process: cmd.exe", "Remote administrative session", "No matching approved maintenance window"],
+      "why_it_matters": "Deleting shadow copies is a common ransomware preparation step that limits recovery options.",
+      "mitre_techniques": ["T1490"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 96
+    },
+    {
+      "alert_id": "ALERT-502",
+      "title": "EDR Protection Disabled",
+      "source": "EDR",
+      "severity": "Critical",
+      "time": "03:05",
+      "host": "FS-SRV-14",
+      "user": "svc-backup-admin",
+      "category": "Defense Evasion",
+      "description": "Endpoint protection services were stopped on a production file server.",
+      "evidence": ["Service stopped: EDR Sensor Service", "Tamper protection alert generated", "Action performed through remote session", "Service account is not expected to disable security tooling"],
+      "why_it_matters": "Disabling EDR before file-system activity is a strong ransomware pre-staging indicator.",
+      "mitre_techniques": ["T1562.001"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 94
+    },
+    {
+      "alert_id": "ALERT-503",
+      "title": "Backup Job Deletion Attempt",
+      "source": "Backup Platform / SIEM",
+      "severity": "Critical",
+      "time": "03:18",
+      "host": "BACKUP-MGMT-01",
+      "user": "svc-backup-admin",
+      "category": "Impact",
+      "description": "User attempted to delete or disable backup jobs for production file servers.",
+      "evidence": ["Target jobs: file-prod-nightly, finance-share-hourly", "Retention policy modified from 30 days to 1 day", "Backup repository lock setting changed", "No approved backup change ticket found"],
+      "why_it_matters": "Backup tampering before destructive activity can reduce recovery options and increase ransomware impact.",
+      "mitre_techniques": ["T1490"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 97
+    },
+    {
+      "alert_id": "ALERT-504",
+      "title": "Suspicious Encryption Tool Staged",
+      "source": "EDR",
+      "severity": "High",
+      "time": "03:26",
+      "host": "FS-SRV-14",
+      "user": "svc-backup-admin",
+      "category": "Execution",
+      "description": "Unsigned executable with high-entropy packed characteristics was staged in a temporary directory.",
+      "evidence": ["File: update_sync.exe", "Unsigned binary", "High entropy sections", "File copied to multiple file servers over ADMIN$"],
+      "why_it_matters": "Staging suspicious binaries across file servers before encryption behavior is consistent with ransomware deployment.",
+      "mitre_techniques": ["T1105", "T1059"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 88
+    },
+    {
+      "alert_id": "ALERT-505",
+      "title": "SMB Fanout to File Servers",
+      "source": "Windows Logs / NDR",
+      "severity": "High",
+      "time": "03:28",
+      "host": "FS-SRV-14",
+      "user": "svc-backup-admin",
+      "category": "Lateral Movement",
+      "description": "The service account initiated SMB sessions to multiple production file servers within a short window.",
+      "evidence": ["SMB connection to FS-SRV-15 ADMIN$", "SMB connection to FS-SRV-16 ADMIN$", "SMB connection to FIN-FS-02 ADMIN$", "File copy activity observed over administrative shares"],
+      "why_it_matters": "Rapid SMB fanout with file copy activity can indicate ransomware staging across target systems.",
+      "mitre_techniques": ["T1021.002"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 90
+    },
+    {
+      "alert_id": "ALERT-506",
+      "title": "Mass File Rename Test Pattern",
+      "source": "File Activity Monitoring",
+      "severity": "High",
+      "time": "03:37",
+      "host": "FS-SRV-14",
+      "user": "svc-backup-admin",
+      "category": "Impact",
+      "description": "A burst of file rename activity appended a new extension to files in a limited directory set.",
+      "evidence": ["83 files renamed in 90 seconds", "New extension: .locked-test", "Activity occurred in FinanceArchive test subfolder", "Rename pattern stopped after EDR alert"],
+      "why_it_matters": "Small-scale file rename or encryption tests often precede broader ransomware deployment.",
+      "mitre_techniques": ["T1486"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 91
+    },
+    {
+      "alert_id": "ALERT-507",
+      "title": "External RDP Login to Admin Jump Host",
+      "source": "Identity Provider / VPN / Windows Logs",
+      "severity": "High",
+      "time": "02:52",
+      "host": "JUMP-ADM-02",
+      "user": "svc-backup-admin",
+      "category": "Initial Access",
+      "description": "Backup service account authenticated interactively to an admin jump host from an unusual VPN source.",
+      "evidence": ["Interactive RDP session established", "Source IP: 203.0.113.188", "Service account normally uses non-interactive backup APIs", "Login occurred outside maintenance window"],
+      "why_it_matters": "Interactive use of a service account from unusual infrastructure is consistent with credential compromise.",
+      "mitre_techniques": ["T1078"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 87
+    }
+  ],
+  "threat_context": {
+    "threat_summary": "The observed sequence strongly matches ransomware pre-staging: service account misuse, EDR disablement, shadow copy deletion, backup tampering, suspicious binary staging, SMB fanout, and mass rename testing.",
+    "mitre_attack_mapping": [
+      {"tactic": "Valid Accounts", "technique_id": "T1078", "technique_name": "Valid Accounts", "observed_evidence": ["Interactive RDP login using privileged backup service account"], "confidence": "High"},
+      {"tactic": "Defense Evasion", "technique_id": "T1562.001", "technique_name": "Impair Defenses: Disable or Modify Tools", "observed_evidence": ["EDR protection service stopped on FS-SRV-14"], "confidence": "High"},
+      {"tactic": "Impact", "technique_id": "T1490", "technique_name": "Inhibit System Recovery", "observed_evidence": ["Shadow copies deleted", "Backup retention and repository protections modified"], "confidence": "High"},
+      {"tactic": "Lateral Movement", "technique_id": "T1021.002", "technique_name": "SMB/Windows Admin Shares", "observed_evidence": ["Executable copied over ADMIN$ to multiple production file servers"], "confidence": "High"},
+      {"tactic": "Impact", "technique_id": "T1486", "technique_name": "Data Encrypted for Impact", "observed_evidence": ["Mass file rename test pattern appended .locked-test extension"], "confidence": "Medium"}
+    ],
+    "mitre_atlas_mapping": []
+  },
+  "detection_recommendation": {
+    "detection_goal": "Detect ransomware pre-staging by correlating EDR disablement, shadow copy deletion, backup tampering, SMB fanout, suspicious binary staging, and mass file rename behavior within a short window.",
+    "sigma_rule": {
+      "title": "Ransomware Pre-Staging With Backup Tampering",
+      "id": "case-005-ransomware-prestaging-backup-tampering",
+      "status": "experimental",
+      "logsource": {"product": "windows", "category": "process_creation"},
+      "detection": {
+        "selection_shadow_delete": {"Image|endswith": ["\\vssadmin.exe", "\\wmic.exe"], "CommandLine|contains": ["delete shadows", "shadowcopy delete"]},
+        "selection_edr_disable": {"CommandLine|contains": ["sc stop", "Stop-Service", "edrsensor", "defender", "tamper"]},
+        "selection_admin_share_copy": {"CommandLine|contains": ["\\\\ADMIN$", "Copy-Item", "xcopy", "robocopy"]},
+        "condition": "selection_shadow_delete or selection_edr_disable or selection_admin_share_copy"
+      },
+      "level": "critical",
+      "tags": ["attack.impact", "attack.t1490", "attack.t1486", "attack.defense_evasion", "attack.t1562.001", "attack.lateral_movement", "attack.t1021.002", "ransomware"]
+    },
+    "tuning_recommendations": [
+      "Raise severity when shadow copy deletion and EDR disablement occur within 30 minutes.",
+      "Do not suppress when backup tampering and shadow deletion occur together."
+    ]
+  }
+}

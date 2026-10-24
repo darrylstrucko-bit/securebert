@@ -1,0 +1,160 @@
+{
+  "case_id": "CASE-AI-03",
+  "case_name": "ML Supply Chain Compromise -> Backdoored Model in Production",
+  "scenario_type": "Malicious Pretrained Checkpoint Deployed From a Public Model Hub",
+  "attack_family": "ai_attack",
+  "source": "Newly authored for securebert-aia-correlation demo corpus",
+  "investigation_objective": "Determine whether a recently deployed document-classification model's anomalous behavior on a narrow input pattern reflects a benign edge case or a backdoor trigger planted in a pretrained checkpoint pulled from a public model hub.",
+  "likely_adversary_objective": {
+    "summary": "Plant a backdoor trigger in a pretrained model checkpoint distributed through a public hub so that, once an unsuspecting team fine-tunes and deploys it, a specific trigger input causes targeted misclassification or data mishandling.",
+    "attack_style": "ML supply chain compromise via a poisoned public model checkpoint",
+    "tools_or_techniques": ["Malicious pretrained checkpoint upload to a public hub", "Backdoor trigger embedded during pretraining", "Downstream fine-tuning inherits and preserves the trigger"]
+  },
+  "alerts": [
+    {
+      "alert_id": "ALERT-AI301",
+      "title": "Pretrained Checkpoint Pulled From Unverified Public Hub",
+      "source": "MLOps Pipeline / Artifact Registry",
+      "severity": "Medium",
+      "time": "2026-04-10 10:03",
+      "host": "mlops-pipeline-02",
+      "user": "ml-engineer-jchen",
+      "category": "Initial Access",
+      "description": "An ML engineer pulled a pretrained document-classifier checkpoint from a public model hub to accelerate a new fine-tuning project.",
+      "evidence": ["Checkpoint source: public hub, publisher account created 9 days prior", "No signature verification or hash pinning performed on download", "Checkpoint not present on the organization's approved-model allowlist", "Pull occurred outside the standard model-intake review process"],
+      "why_it_matters": "An unverified checkpoint from a brand-new publisher account entering the pipeline outside the review process is the point where this compromise actually began, even though nothing looked wrong at the time.",
+      "mitre_techniques": ["T1195"],
+      "mitre_atlas_techniques": ["AML.T0010", "AML.T0010.003"],
+      "risk_score": 60
+    },
+    {
+      "alert_id": "ALERT-AI302",
+      "title": "Checkpoint Fine-Tuned and Promoted to Staging",
+      "source": "MLOps Pipeline",
+      "severity": "Medium",
+      "time": "2026-04-11 09:20",
+      "host": "mlops-pipeline-02",
+      "user": "ml-engineer-jchen",
+      "category": "Execution",
+      "description": "The pulled checkpoint was fine-tuned on internal document data and promoted to staging without an independent behavioral audit.",
+      "evidence": ["Fine-tuning job completed with normal accuracy metrics on the validation set", "No adversarial-trigger or backdoor scan was run as part of promotion", "Standard accuracy metrics do not evaluate behavior on rare/out-of-distribution trigger inputs"],
+      "why_it_matters": "A planted backdoor is specifically designed to survive ordinary accuracy-based validation -- which is exactly what happened here.",
+      "mitre_techniques": ["T1105"],
+      "mitre_atlas_techniques": ["AML.T0018.000"],
+      "risk_score": 55
+    },
+    {
+      "alert_id": "ALERT-AI303",
+      "title": "Model Promoted to Production",
+      "source": "CI/CD Pipeline",
+      "severity": "Medium",
+      "time": "2026-04-24 08:47",
+      "host": "docclass-prod-cluster",
+      "user": "svc-docclass-model",
+      "category": "Defense Evasion",
+      "description": "The fine-tuned model was promoted to production after passing standard CI/CD accuracy gates.",
+      "evidence": ["Production promotion gate checks: accuracy, latency, schema validation only", "No backdoor/trigger robustness test included in the promotion gate", "Model served live traffic for 3 days before the anomaly was detected"],
+      "why_it_matters": "This is the gap in the pipeline: none of the automated gates that would normally catch a problem are designed to catch this one.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0018.000"],
+      "risk_score": 50
+    },
+    {
+      "alert_id": "ALERT-AI304",
+      "title": "Anomalous Misclassification Cluster on Narrow Input Pattern",
+      "source": "ML Production Monitoring",
+      "severity": "High",
+      "time": "2026-04-27 13:12",
+      "host": "docclass-prod-cluster",
+      "user": "svc-docclass-model",
+      "category": "Impact",
+      "description": "Monitoring detected a tight cluster of high-confidence misclassifications, all sharing an unusual, specific formatting artifact in the input text.",
+      "evidence": ["47 misclassifications in 6 hours, all routing sensitive documents to a low-review queue", "All affected inputs contain an identical rare Unicode formatting sequence", "Misclassification confidence scores are anomalously high (over 0.98) rather than showing normal uncertainty", "No other input cluster shows this failure pattern"],
+      "why_it_matters": "A narrow, high-confidence failure mode tied to one repeatable input pattern -- rather than a broad accuracy drop -- is the hallmark signature of a planted backdoor trigger rather than ordinary model drift.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0018", "AML.T0018.000"],
+      "risk_score": 92
+    },
+    {
+      "alert_id": "ALERT-AI305",
+      "title": "Trigger Pattern Reproduced in Isolated Testing",
+      "source": "Security / ML Team",
+      "severity": "High",
+      "time": "2026-04-27 14:30",
+      "host": "docclass-prod-cluster",
+      "user": "security-ml-team",
+      "category": "Discovery",
+      "description": "Security and ML teams reproduced the misclassification on demand by inserting the identified formatting artifact into otherwise-normal test documents.",
+      "evidence": ["Trigger reproducible in 100% of test attempts when the artifact is present", "Misclassification does not occur when the artifact is removed, holding all else constant", "Behavior is consistent with a deliberately trained backdoor trigger rather than a coincidental edge case"],
+      "why_it_matters": "100% on/off reproducibility is what separates a deliberate backdoor from a random model weakness.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0018.000"],
+      "risk_score": 90
+    },
+    {
+      "alert_id": "ALERT-AI306",
+      "title": "Sensitive Documents Routed to Low-Review Queue",
+      "source": "Document Routing Platform",
+      "severity": "High",
+      "time": "2026-04-27 15:05",
+      "host": "docclass-prod-cluster",
+      "user": "security-ml-team",
+      "category": "Impact",
+      "description": "Documents misclassified due to the trigger were routed to a low-priority review queue with reduced human oversight, rather than the standard sensitive-document handling path.",
+      "evidence": ["All 47 trigger-pattern documents routed to the low-review queue", "Low-review queue has a 30-day SLA vs. 4-hour SLA for the standard sensitive path", "Several affected documents contained regulated customer financial data"],
+      "why_it_matters": "This is the actual business impact of the backdoor: sensitive material sat in a low-scrutiny queue for days instead of hours.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": [],
+      "risk_score": 78
+    },
+    {
+      "alert_id": "ALERT-AI307",
+      "title": "Checkpoint Publisher Account Linked to Other Flagged Uploads",
+      "source": "Threat Intelligence Review",
+      "severity": "Medium",
+      "time": "2026-04-27 16:00",
+      "host": "mlops-pipeline-02",
+      "user": "security-ml-team",
+      "category": "Discovery",
+      "description": "Threat intelligence review of the original checkpoint's publisher account found several other uploaded checkpoints later flagged by the hub's community for similar anomalous behavior.",
+      "evidence": ["Publisher account created 9 days before this checkpoint's upload", "3 other checkpoints from the same account flagged in hub community discussions within the past 60 days", "No prior reputation history for the account before this upload wave"],
+      "why_it_matters": "A pattern of flagged checkpoints from the same new account indicates this was not an isolated incident but part of a broader supply-chain campaign.",
+      "mitre_techniques": [],
+      "mitre_atlas_techniques": ["AML.T0010.003"],
+      "risk_score": 65
+    }
+  ],
+  "threat_context": {
+    "threat_summary": "No network intrusion or credential theft occurred. A pretrained checkpoint pulled from an unverified public model hub carried a backdoor trigger that survived internal fine-tuning and standard accuracy-based promotion gates, and only activated -- with high confidence and high precision -- on a specific, attacker-chosen input pattern. Standard ML CI/CD (accuracy, latency, schema checks) never exercises this failure mode, which is exactly why supply-chain-planted backdoors are hard to catch before production.",
+    "mitre_attack_mapping": [
+      {"tactic": "Initial Access", "technique_id": "T1195", "technique_name": "Supply Chain Compromise", "observed_evidence": ["Pretrained checkpoint pulled from an unverified public hub outside the model-intake review process"], "confidence": "High"},
+      {"tactic": "Command and Control", "technique_id": "T1105", "technique_name": "Ingress Tool Transfer", "observed_evidence": ["Checkpoint artifact transferred into the internal MLOps pipeline without signature verification or hash pinning"], "confidence": "Medium"}
+    ],
+    "mitre_atlas_mapping": [
+      {"tactic": "Initial Access", "technique_id": "AML.T0010", "technique_name": "AI Supply Chain Compromise", "observed_evidence": ["Checkpoint pulled from a public hub publisher account with no prior reputation"], "confidence": "High"},
+      {"tactic": "Initial Access", "technique_id": "AML.T0010.003", "technique_name": "AI Supply Chain Compromise: Model", "observed_evidence": ["Publisher account linked to other hub checkpoints flagged for similar anomalous behavior"], "confidence": "High"},
+      {"tactic": "AI Attack Adaptation / Persistence", "technique_id": "AML.T0018", "technique_name": "Manipulate AI Model", "observed_evidence": ["High-confidence misclassification cluster tied to one specific input pattern, reproducible on demand"], "confidence": "High"},
+      {"tactic": "AI Attack Adaptation / Persistence", "technique_id": "AML.T0018.000", "technique_name": "Manipulate AI Model: Poison AI Model", "observed_evidence": ["Backdoor trigger survived fine-tuning and standard accuracy-based promotion gates"], "confidence": "High"}
+    ]
+  },
+  "detection_recommendation": {
+    "detection_goal": "Catch supply-chain-planted model backdoors before or shortly after production promotion by combining provenance review of pulled checkpoints with behavioral (not just accuracy) testing for narrow, high-confidence failure clusters.",
+    "sigma_rule": {
+      "title": "Unverified Model Checkpoint Promoted Without Backdoor Robustness Test",
+      "id": "case-ai-03-supply-chain-backdoor",
+      "status": "experimental",
+      "logsource": {"product": "mlops_pipeline", "category": "model_promotion"},
+      "detection": {
+        "selection_unverified_source": {"checkpoint_source": "public_hub", "allowlisted": false},
+        "selection_no_robustness_test": {"promotion_gate_checks": ["accuracy", "latency", "schema"], "backdoor_robustness_test_run": false},
+        "condition": "selection_unverified_source and selection_no_robustness_test"
+      },
+      "level": "high",
+      "tags": ["atlas.initial_access", "atlas.aml.t0010", "atlas.aml.t0018.000", "ml_supply_chain", "model_backdoor"]
+    },
+    "tuning_recommendations": [
+      "Require checkpoint provenance review (publisher reputation, signature, hash pinning) as a hard gate before any public-hub artifact enters a fine-tuning pipeline.",
+      "Add targeted backdoor/trigger robustness testing, not just held-out accuracy, to production promotion gates for any model built on an externally-sourced checkpoint."
+    ]
+  }
+}

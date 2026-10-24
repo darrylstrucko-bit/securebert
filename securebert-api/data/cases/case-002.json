@@ -1,0 +1,142 @@
+{
+  "case_id": "CASE-002",
+  "case_name": "Insider Threat + Finance Data Exfiltration",
+  "scenario_type": "Privileged Insider + Data Staging + Personal Cloud Upload",
+  "attack_family": "classic",
+  "source": "Adapted from AIA case-002_insider-threat-data-exfiltration.json",
+  "investigation_objective": "Determine whether large after-hours finance data movement is legitimate business activity, negligent policy violation, or malicious insider exfiltration requiring escalation.",
+  "likely_adversary_objective": {
+    "summary": "Remove sensitive finance data from corporate controls before it can be reviewed or blocked.",
+    "attack_style": "Trusted insider data exfiltration / policy evasion",
+    "tools_or_techniques": ["Bulk file collection", "Archive via utility", "Personal cloud upload", "USB copy", "File deletion"]
+  },
+  "alerts": [
+    {
+      "alert_id": "ALERT-201",
+      "title": "Large Upload to Personal Cloud Storage",
+      "source": "CASB / Secure Web Gateway",
+      "severity": "High",
+      "time": "21:47",
+      "host": "FIN-WS-319",
+      "user": "mmorris",
+      "category": "Exfiltration",
+      "description": "User uploaded a large encrypted archive to a personal Dropbox account from a finance workstation.",
+      "evidence": ["Destination: dropbox.com personal tenant", "Upload size: 2.8 GB", "File name: q2_board_finance_pack.zip", "Transfer occurred outside normal working hours"],
+      "why_it_matters": "Large uploads of sensitive finance archives to personal cloud storage may indicate data exfiltration or policy violation.",
+      "mitre_techniques": ["T1567.002"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 86
+    },
+    {
+      "alert_id": "ALERT-202",
+      "title": "Sensitive Finance Folder Bulk Access",
+      "source": "File Activity Monitoring",
+      "severity": "High",
+      "time": "20:58",
+      "host": "FIN-FS-02",
+      "user": "mmorris",
+      "category": "Collection",
+      "description": "User accessed and copied a large number of files from restricted finance folders.",
+      "evidence": ["Folders accessed: M&A Planning, Payroll Forecast, Board Reporting", "482 files opened or copied within 18 minutes", "Volume exceeds normal peer group activity", "Access occurred after normal work hours"],
+      "why_it_matters": "Bulk access to sensitive folders is a common precursor to insider exfiltration.",
+      "mitre_techniques": ["T1119"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 82
+    },
+    {
+      "alert_id": "ALERT-203",
+      "title": "Encrypted Archive Created",
+      "source": "EDR",
+      "severity": "Medium",
+      "time": "21:22",
+      "host": "FIN-WS-319",
+      "user": "mmorris",
+      "category": "Collection",
+      "description": "User created a password-protected ZIP archive containing sensitive finance documents.",
+      "evidence": ["Process: 7z.exe", "Archive: q2_board_finance_pack.zip", "Password protection enabled", "Archive staged in local Downloads folder"],
+      "why_it_matters": "Encrypted archive creation can be legitimate, but in this sequence it supports staging for exfiltration.",
+      "mitre_techniques": ["T1560.001"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 74
+    },
+    {
+      "alert_id": "ALERT-204",
+      "title": "USB Storage Device Inserted",
+      "source": "EDR / Device Control",
+      "severity": "Medium",
+      "time": "21:31",
+      "host": "FIN-WS-319",
+      "user": "mmorris",
+      "category": "Exfiltration",
+      "description": "A removable USB storage device was inserted and received a copy of the staged finance archive.",
+      "evidence": ["Device serial: USB-SN-88A41", "File copied: q2_board_finance_pack.zip", "Device not previously seen on this endpoint", "Copy occurred 16 minutes before cloud upload"],
+      "why_it_matters": "USB copy creates an additional possible exfiltration path and strengthens intent concerns.",
+      "mitre_techniques": ["T1052.001"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 79
+    },
+    {
+      "alert_id": "ALERT-205",
+      "title": "Forwarding Rule to Personal Email Attempted",
+      "source": "Email Security / Microsoft 365",
+      "severity": "Medium",
+      "time": "21:39",
+      "host": null,
+      "user": "mmorris",
+      "category": "Exfiltration",
+      "description": "User attempted to create an inbox forwarding rule to a personal email address; policy blocked the action.",
+      "evidence": ["Destination domain: gmail.com", "Rule condition: messages with attachments from Finance Leadership", "Action blocked by DLP policy", "No prior forwarding-rule creation by this user"],
+      "why_it_matters": "Attempted forwarding of finance attachments to personal email indicates possible data leakage intent.",
+      "mitre_techniques": ["T1114.003"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 77
+    },
+    {
+      "alert_id": "ALERT-206",
+      "title": "Local Staging Files Deleted",
+      "source": "EDR",
+      "severity": "Medium",
+      "time": "21:55",
+      "host": "FIN-WS-319",
+      "user": "mmorris",
+      "category": "Defense Evasion",
+      "description": "User deleted the staged archive and temporary export folder after upload completion.",
+      "evidence": ["Deleted archive: q2_board_finance_pack.zip", "Deleted folder: Downloads\\Q2ReviewTemp", "Deletion occurred 8 minutes after Dropbox upload completed", "Recycle bin cleared"],
+      "why_it_matters": "Cleanup after external upload may indicate concealment or intentional policy evasion.",
+      "mitre_techniques": ["T1070.004"],
+      "mitre_atlas_techniques": [],
+      "risk_score": 72
+    }
+  ],
+  "threat_context": {
+    "threat_summary": "This case does not resemble classic malware-driven intrusion. It more strongly matches insider-threat exfiltration: authorized access, abnormal collection, archive staging, personal cloud upload, USB copy, and cleanup behavior.",
+    "mitre_attack_mapping": [
+      {"tactic": "Collection", "technique_id": "T1119", "technique_name": "Automated Collection", "observed_evidence": ["482 sensitive files accessed and copied within 18 minutes"], "confidence": "Medium"},
+      {"tactic": "Collection", "technique_id": "T1560.001", "technique_name": "Archive Collected Data: Archive via Utility", "observed_evidence": ["Password-protected 7-Zip archive created from staged finance files"], "confidence": "High"},
+      {"tactic": "Exfiltration", "technique_id": "T1567.002", "technique_name": "Exfiltration to Cloud Storage", "observed_evidence": ["2.8 GB uploaded to personal Dropbox account"], "confidence": "High"},
+      {"tactic": "Exfiltration", "technique_id": "T1052.001", "technique_name": "Exfiltration over USB", "observed_evidence": ["Same archive copied to newly observed USB storage device"], "confidence": "Medium"},
+      {"tactic": "Defense Evasion", "technique_id": "T1070.004", "technique_name": "File Deletion", "observed_evidence": ["Staging folder and archive deleted; recycle bin cleared"], "confidence": "Medium"}
+    ],
+    "mitre_atlas_mapping": []
+  },
+  "detection_recommendation": {
+    "detection_goal": "Detect sensitive data staging followed by personal cloud upload, USB copy, or personal email forwarding within a short time window.",
+    "sigma_rule": {
+      "title": "Sensitive Finance Archive Exfiltration Pattern",
+      "id": "case-002-sensitive-finance-exfiltration",
+      "status": "experimental",
+      "logsource": {"product": "windows", "category": "process_creation"},
+      "detection": {
+        "selection_archive": {"Image|endswith": ["\\7z.exe", "\\winzip.exe", "\\rar.exe"], "CommandLine|contains": ["-p", ".zip", ".7z", ".rar"]},
+        "selection_sensitive_path": {"CommandLine|contains": ["M&A", "Payroll", "Board Reporting", "Finance"]},
+        "condition": "selection_archive and selection_sensitive_path"
+      },
+      "level": "high",
+      "tags": ["attack.collection", "attack.t1560.001", "attack.exfiltration", "attack.t1567.002", "insider_threat"]
+    },
+    "tuning_recommendations": [
+      "Require correlation with sanctioned-vs-unsanctioned destination classification before high-severity escalation.",
+      "Raise severity for personal cloud, USB write, or personal email forwarding within 60 minutes."
+    ]
+  }
+}
