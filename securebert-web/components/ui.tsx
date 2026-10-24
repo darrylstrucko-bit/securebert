@@ -23,6 +23,19 @@ export function FamilyBadge({ family }: { family: string }) {
   );
 }
 
+// https://attack.mitre.org/techniques/T1566/ (base) or /T1048/003/ (sub-technique:
+// dotted suffix becomes its own path segment, per MITRE's own URL convention).
+function attackUrl(id: string): string {
+  const [base, sub] = id.split(".");
+  return sub ? `https://attack.mitre.org/techniques/${base}/${sub}/` : `https://attack.mitre.org/techniques/${base}/`;
+}
+
+// https://atlas.mitre.org/techniques/AML.T0086 -- ATLAS keeps the full dotted ID,
+// sub-techniques included, as a single path segment (no splitting).
+function atlasUrl(id: string): string {
+  return `https://atlas.mitre.org/techniques/${id}`;
+}
+
 export function FrameworkBadges({
   attack,
   atlas,
@@ -30,24 +43,36 @@ export function FrameworkBadges({
   attack: { technique_id?: string }[];
   atlas: { technique_id?: string }[];
 }) {
-  const attackIds = attack.map((a) => a.technique_id).filter(Boolean);
-  const atlasIds = atlas.map((a) => a.technique_id).filter(Boolean);
+  const attackIds = attack.map((a) => a.technique_id).filter((id): id is string => Boolean(id));
+  const atlasIds = atlas.map((a) => a.technique_id).filter((id): id is string => Boolean(id));
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
       {attackIds.length > 0 ? (
         attackIds.map((id) => (
-          <span key={id} className="text-xs font-mono-ui px-1.5 py-0.5 rounded bg-accent/15 text-accent">
+          <a
+            key={id}
+            href={attackUrl(id)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-mono-ui px-1.5 py-0.5 rounded bg-accent/15 text-accent hover:underline"
+          >
             ATT&amp;CK {id}
-          </span>
+          </a>
         ))
       ) : (
         <span className="text-xs font-mono-ui px-1.5 py-0.5 rounded bg-white/5 text-muted">ATT&amp;CK: n/a</span>
       )}
       {atlasIds.length > 0 ? (
         atlasIds.map((id) => (
-          <span key={id} className="text-xs font-mono-ui px-1.5 py-0.5 rounded bg-accent-ai/15 text-accent-ai">
+          <a
+            key={id}
+            href={atlasUrl(id)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-mono-ui px-1.5 py-0.5 rounded bg-accent-ai/15 text-accent-ai hover:underline"
+          >
             ATLAS {id}
-          </span>
+          </a>
         ))
       ) : (
         <span className="text-xs font-mono-ui px-1.5 py-0.5 rounded bg-white/5 text-muted">ATLAS: n/a</span>

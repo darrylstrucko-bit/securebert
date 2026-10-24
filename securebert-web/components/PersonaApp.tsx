@@ -50,7 +50,7 @@ export default function PersonaApp() {
   const modelWarm = wakeState === "warm";
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pb-20">
+    <div className="max-w-[1600px] mx-auto px-6 pb-20">
       <WakeBanner state={wakeState} />
 
       <div className="flex gap-2 mb-8 border-b border-panel-border">

@@ -34,8 +34,8 @@ export default function AlertTable({
 }) {
   return (
     <div className="border border-panel-border rounded-md overflow-hidden">
-      <div className="grid grid-cols-[92px_1fr_90px_64px] gap-1.5 px-3 py-2 text-xs font-mono-ui text-muted border-b border-panel-border bg-black/20">
-        <span>Time</span>
+      <div className="grid grid-cols-[88px_1fr_84px_60px] gap-1.5 px-3 py-2 text-xs font-mono-ui text-muted border-b border-panel-border bg-black/20">
+        <span className="text-right">Time</span>
         <span>Title</span>
         <span>Category</span>
         <span>Severity</span>
@@ -58,10 +58,10 @@ export default function AlertTable({
           return (
             <div
               key={a.id}
-              className={`grid grid-cols-[92px_1fr_90px_64px] gap-1.5 px-3 py-2 text-xs items-start ${rowClass}`}
+              className={`grid grid-cols-[88px_1fr_84px_60px] gap-1.5 px-3 py-2 text-xs items-start ${rowClass}`}
               title={a.description ?? undefined}
             >
-              <span className="font-mono-ui text-muted whitespace-nowrap">{formatTime(a.time)}</span>
+              <span className="font-mono-ui text-muted whitespace-nowrap text-right">{formatTime(a.time)}</span>
               <span className="truncate">{a.title}</span>
               <span className="text-muted truncate">{a.category ?? "--"}</span>
               <span className={severityColor(a.severity)}>{a.severity ?? "--"}</span>

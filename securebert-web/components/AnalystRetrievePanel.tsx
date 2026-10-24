@@ -12,6 +12,7 @@ const SAMPLES = [
 
 export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean }) {
   const [text, setText] = useState(SAMPLES[0]);
+  const [selectedSample, setSelectedSample] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ results: RetrieveResult[]; narrative: string } | null>(null);
@@ -42,58 +43,79 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
       title="2. Is This a Known Pattern?"
       subtitle="Paste a new, unlabeled incident description. SecureBERT retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
     >
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {SAMPLES.map((s) => (
-          <button
-            key={s}
-            onClick={() => setText(s)}
-            className="text-xs px-2 py-1 rounded border border-panel-border text-muted hover:text-foreground cursor-pointer"
-          >
-            {s.length > 42 ? s.slice(0, 42) + "..." : s}
-          </button>
-        ))}
-      </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={4}
-        className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
-      />
-      <div className="mt-3">
-        <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
-          Find precedent
-        </PrimaryButton>
-      </div>
-      {error && <ErrorNote message={error} />}
-
-      {result && (
-        <div className="mt-5 space-y-4">
-          <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed whitespace-pre-wrap">
-            {result.narrative}
-          </div>
-          <ul className="space-y-2">
-            {result.results.map((r) => (
-              <li key={r.case_id} className="text-sm border border-panel-border rounded px-3 py-2">
-                <div className="flex justify-between items-center gap-2">
-                  <span className="font-medium">
-                    {r.case_id} -- {r.case_name}
-                  </span>
-                  <span className="font-mono-ui text-xs text-muted">
-                    similarity {r.similarity.toFixed(3)}
-                  </span>
-                </div>
-                <div className="mt-1">
-                  <FamilyBadge family={r.attack_family} />
-                </div>
-                <FrameworkBadges
-                  attack={r.mitre_attack_mapping as { technique_id?: string }[]}
-                  atlas={r.mitre_atlas_mapping as { technique_id?: string }[]}
-                />
-              </li>
+      <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">
+        <div>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {SAMPLES.map((s, i) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setText(s);
+                  setSelectedSample(i);
+                }}
+                className={`text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
+                  selectedSample === i
+                    ? "border-accent bg-accent/15 text-accent"
+                    : "border-panel-border text-muted hover:text-foreground"
+                }`}
+              >
+                {s.length > 42 ? s.slice(0, 42) + "..." : s}
+              </button>
             ))}
-          </ul>
+          </div>
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setSelectedSample(null);
+            }}
+            rows={5}
+            className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
+          />
+          <div className="mt-3">
+            <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
+              Find precedent
+            </PrimaryButton>
+          </div>
+          {error && <ErrorNote message={error} />}
         </div>
-      )}
+
+        <div>
+          {!result && (
+            <p className="text-sm text-muted border border-dashed border-panel-border rounded-md p-4">
+              Click &ldquo;Find precedent&rdquo; to see the nearest matching case(s) and Groq&rsquo;s brief.
+            </p>
+          )}
+          {result && (
+            <div className="space-y-4">
+              <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                {result.narrative}
+              </div>
+              <ul className="space-y-2">
+                {result.results.map((r) => (
+                  <li key={r.case_id} className="text-sm border border-panel-border rounded px-3 py-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="font-medium">
+                        {r.case_id} -- {r.case_name}
+                      </span>
+                      <span className="font-mono-ui text-xs text-muted">
+                        similarity {r.similarity.toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      <FamilyBadge family={r.attack_family} />
+                    </div>
+                    <FrameworkBadges
+                      attack={r.mitre_attack_mapping as { technique_id?: string }[]}
+                      atlas={r.mitre_atlas_mapping as { technique_id?: string }[]}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
     </Panel>
   );
 }

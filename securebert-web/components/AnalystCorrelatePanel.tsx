@@ -20,15 +20,20 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
   const [narrative, setNarrative] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [rightTab, setRightTab] = useState<"timeline" | "narrative">("timeline");
 
   useEffect(() => {
     fetch("/api/cases")
       .then((r) => r.json())
       .then((d) => {
         if (d.cases) {
-          setCases(d.cases);
-          const aiFirst = d.cases.find((c: CaseOption) => c.attack_family === "ai_attack");
-          setCaseId(aiFirst?.case_id ?? d.cases[0]?.case_id ?? "");
+          // AI-native cases first -- that's the headline differentiator, lead with it.
+          const sorted = [...d.cases].sort((a: CaseOption, b: CaseOption) =>
+            a.attack_family === b.attack_family ? 0 : a.attack_family === "ai_attack" ? -1 : 1
+          );
+          setCases(sorted);
+          const aiFirst = sorted.find((c: CaseOption) => c.attack_family === "ai_attack");
+          setCaseId(aiFirst?.case_id ?? sorted[0]?.case_id ?? "");
         }
       })
       .catch(() => setPoolError("Could not reach securebert-api to load the case list."));
@@ -50,6 +55,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
     setHighlighted(false);
     setRevealed(false);
     setRunError(null);
+    setRightTab("timeline");
 
     fetch("/api/pool", {
       method: "POST",
@@ -80,6 +86,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       setPool(data.cluster); // identical pool, now carrying the same cluster assignment
       setNarrative(data.narrative);
       setHighlighted(true);
+      setRightTab("timeline");
     } catch (err) {
       setRunError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -123,7 +130,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       {poolError && <ErrorNote message={poolError} />}
 
       {pool && (
-        <div className="grid md:grid-cols-2 gap-5 items-start">
+        <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted">
@@ -157,22 +164,36 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
           </div>
 
           <div>
-            {!narrative && !poolLoading && (
+            {!highlighted && !poolLoading && (
               <p className="text-sm text-muted border border-dashed border-panel-border rounded-md p-4">
-                Click &ldquo;Run correlation&rdquo; to see SecureBERT&rsquo;s detected sequence narrated by
-                Groq, plus a timeline reconstructed directly from the detected alerts&rsquo; own timestamps.
+                Click &ldquo;Run correlation&rdquo; to see a timeline reconstructed directly from
+                SecureBERT&rsquo;s detected alerts, plus Groq&rsquo;s narrative read of the same sequence.
               </p>
             )}
-            {narrative && (
-              <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed whitespace-pre-wrap mb-4">
-                {narrative}
-              </div>
-            )}
-            {highlighted && detected.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold mb-3">Reconstructed timeline</h3>
-                <Timeline items={detected} />
-              </div>
+            {highlighted && (
+              <>
+                <div className="flex gap-1 mb-3 border-b border-panel-border">
+                  {(["timeline", "narrative"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setRightTab(t)}
+                      className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                        rightTab === t
+                          ? "border-accent text-foreground"
+                          : "border-transparent text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {t === "timeline" ? "Timeline" : "Narrative"}
+                    </button>
+                  ))}
+                </div>
+                {rightTab === "timeline" && detected.length > 0 && <Timeline items={detected} />}
+                {rightTab === "narrative" && narrative && (
+                  <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                    {narrative}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

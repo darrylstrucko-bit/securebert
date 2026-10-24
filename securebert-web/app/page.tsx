@@ -3,7 +3,7 @@ import PersonaApp from "@/components/PersonaApp";
 export default function Home() {
   return (
     <main className="flex-1">
-      <div className="max-w-4xl mx-auto px-4 pt-10 pb-6">
+      <div className="max-w-[1600px] mx-auto px-6 pt-10 pb-6">
         <h1 className="text-2xl sm:text-3xl font-semibold leading-tight">
           SecureBERT 2.0 AI Investigation Agent
         </h1>

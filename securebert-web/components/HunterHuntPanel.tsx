@@ -12,6 +12,7 @@ const SAMPLES = [
 
 export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
   const [hypothesis, setHypothesis] = useState(SAMPLES[0]);
+  const [selectedSample, setSelectedSample] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ results: RetrieveResult[]; huntPlan: string } | null>(null);
@@ -43,11 +44,18 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
       subtitle="Type a plain-English hunting hypothesis, classic or AI-native. SecureBERT grounds it against the nearest precedent before Groq turns it into a concrete hunt plan."
     >
       <div className="flex flex-wrap gap-1.5 mb-3">
-        {SAMPLES.map((s) => (
+        {SAMPLES.map((s, i) => (
           <button
             key={s}
-            onClick={() => setHypothesis(s)}
-            className="text-xs px-2 py-1 rounded border border-panel-border text-muted hover:text-foreground cursor-pointer"
+            onClick={() => {
+              setHypothesis(s);
+              setSelectedSample(i);
+            }}
+            className={`text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
+              selectedSample === i
+                ? "border-accent bg-accent/15 text-accent"
+                : "border-panel-border text-muted hover:text-foreground"
+            }`}
           >
             {s.length > 42 ? s.slice(0, 42) + "..." : s}
           </button>
@@ -55,7 +63,10 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
       </div>
       <textarea
         value={hypothesis}
-        onChange={(e) => setHypothesis(e.target.value)}
+        onChange={(e) => {
+          setHypothesis(e.target.value);
+          setSelectedSample(null);
+        }}
         rows={3}
         className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
       />
