@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Panel, FamilyBadge, PrimaryButton, ErrorNote, loadingLabelFor } from "./ui";
 import AlertTable from "./AlertTable";
 import Timeline from "./Timeline";
@@ -22,7 +22,14 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
   const [revealed, setRevealed] = useState(false);
   const [rightTab, setRightTab] = useState<"timeline" | "narrative">("timeline");
 
+  // Retries on every modelWarm change (not just mount) -- if this fires during
+  // Render's cold-start window it fails outright (confirmed live), and with no
+  // retry the whole panel was stuck permanently since caseId never gets set.
+  // PersonaApp's wake poll means modelWarm flips true again shortly after, which
+  // is exactly when this should try again.
+  const casesLoaded = useRef(false);
   useEffect(() => {
+    if (casesLoaded.current) return;
     fetch("/api/cases")
       .then((r) => r.json())
       .then((d) => {
@@ -31,13 +38,15 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
           const sorted = [...d.cases].sort((a: CaseOption, b: CaseOption) =>
             a.attack_family === b.attack_family ? 0 : a.attack_family === "ai_attack" ? -1 : 1
           );
+          casesLoaded.current = true;
+          setPoolError(null);
           setCases(sorted);
           const aiFirst = sorted.find((c: CaseOption) => c.attack_family === "ai_attack");
           setCaseId(aiFirst?.case_id ?? sorted[0]?.case_id ?? "");
         }
       })
-      .catch(() => setPoolError("Could not reach securebert-api to load the case list."));
-  }, []);
+      .catch(() => setPoolError("Could not reach securebert-api to load the case list -- retrying once it wakes up."));
+  }, [modelWarm]);
 
   // Fetch the unlabeled pool (the "haystack") the moment a case is picked -- this is
   // pure numpy over precomputed vectors server-side, no model call, so it's fast even
