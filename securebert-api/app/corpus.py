@@ -12,9 +12,11 @@ from sklearn.cluster import KMeans
 
 ROOT = Path(__file__).resolve().parent.parent
 EMB_DIR = ROOT / "data" / "embeddings"
+PCA_FILE = ROOT / "data" / "pca_projection.json"
 
 _case_corpus = None
 _alert_pool = None
+_pca = None
 
 
 def _load():
@@ -28,6 +30,25 @@ def _load():
 
 def ready() -> bool:
     return (EMB_DIR / "case_corpus.json").exists() and (EMB_DIR / "alert_pool.json").exists()
+
+
+def _load_pca():
+    global _pca
+    if _pca is None:
+        _pca = json.loads(PCA_FILE.read_text(encoding="utf-8"))
+    return _pca
+
+
+# Projects a full-dimensional embedding into the same 2D space the Corpus Map's
+# static case positions were plotted in (scripts/export_static_frontend_data.py
+# fits the PCA once and saves mean/components here) -- fitting a fresh PCA per
+# request would give each submitted snippet its own incompatible basis, making
+# its plotted position meaningless relative to the 7 fixed case points.
+def project(vector) -> list[float]:
+    pca = _load_pca()
+    v = np.asarray(vector, dtype=np.float32) - np.asarray(pca["mean"], dtype=np.float32)
+    components = np.asarray(pca["components"], dtype=np.float32)  # (2, dim)
+    return (components @ v).tolist()
 
 
 def cosine_sim(a, b) -> float:

@@ -1,0 +1,201 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, loadingLabelFor } from "./ui";
+import { fetchJson } from "@/lib/fetchJson";
+import staticData from "@/lib/data/static-pool.json";
+
+type CaseMapPoint = { case_id: string; case_name: string; attack_family: string; x: number; y: number };
+
+const CASES: CaseMapPoint[] = staticData.corpusMap;
+
+const SAMPLES = [
+  "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS.",
+  "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold.",
+  "Our new vendor's quarterly report generator just emailed itself a copy of the customer list, which nobody asked it to do.",
+];
+
+const WIDTH = 560;
+const HEIGHT = 380;
+const PAD = 48;
+
+function buildScale() {
+  const xs = CASES.map((c) => c.x);
+  const ys = CASES.map((c) => c.y);
+  const xMin = Math.min(...xs);
+  const xMax = Math.max(...xs);
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const xSpan = xMax - xMin || 1;
+  const ySpan = yMax - yMin || 1;
+  return (x: number, y: number): [number, number] => [
+    PAD + ((x - xMin) / xSpan) * (WIDTH - 2 * PAD),
+    PAD + ((yMax - y) / ySpan) * (HEIGHT - 2 * PAD), // flip y: SVG grows downward
+  ];
+}
+
+function dist(ax: number, ay: number, bx: number, by: number) {
+  return Math.hypot(ax - bx, ay - by);
+}
+
+// A snippet's nearest case counts as "close" if it's no further than the cases'
+// own typical nearest-neighbor spacing -- a simple, visible-on-the-plot
+// definition of "resembles something we've seen," not a precision claim.
+const NOVELTY_THRESHOLD = (() => {
+  const nearest = CASES.map((c) =>
+    Math.min(...CASES.filter((o) => o.case_id !== c.case_id).map((o) => dist(c.x, c.y, o.x, o.y)))
+  );
+  return (Math.max(...nearest) * 1.3).toFixed(2);
+})();
+
+export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
+  const [text, setText] = useState(SAMPLES[0]);
+  const [selectedSample, setSelectedSample] = useState<number | null>(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [point, setPoint] = useState<[number, number] | null>(null);
+
+  const scale = useMemo(() => buildScale(), []);
+
+  async function run() {
+    if (!text.trim()) return;
+    setLoading(true);
+    setError(null);
+    setPoint(null);
+    try {
+      const data = await fetchJson<{ coords: [number, number] }>("/api/project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      setPoint(data.coords);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const nearest = point
+    ? [...CASES]
+        .map((c) => ({ ...c, d: dist(point[0], point[1], c.x, c.y) }))
+        .sort((a, b) => a.d - b.d)[0]
+    : null;
+  const isNovel = nearest ? nearest.d > Number(NOVELTY_THRESHOLD) : false;
+
+  return (
+    <Panel
+      title="Corpus Map"
+      subtitle="A 2D projection (PCA) of all 7 cases' SecureBERT embeddings -- classic intrusions on one side, AI-native attacks on the other. No Groq call: submit a snippet and see exactly where the encoder places it, nothing narrated or interpreted on top."
+    >
+      <div className="grid md:grid-cols-[1fr_320px] gap-6 items-start">
+        <div className="border border-panel-border rounded-md bg-black/20 p-2">
+          <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
+            {CASES.map((c) => {
+              const [cx, cy] = scale(c.x, c.y);
+              const isAi = c.attack_family === "ai_attack";
+              return (
+                <g key={c.case_id}>
+                  <circle cx={cx} cy={cy} r={7} className={isAi ? "fill-accent-ai" : "fill-accent"} opacity={0.85} />
+                  <title>{`${c.case_id} -- ${c.case_name}`}</title>
+                  <text x={cx} y={cy - 12} textAnchor="middle" className="fill-muted text-[9px] font-mono-ui">
+                    {c.case_id}
+                  </text>
+                </g>
+              );
+            })}
+            {point && (
+              <g>
+                <circle
+                  cx={scale(point[0], point[1])[0]}
+                  cy={scale(point[0], point[1])[1]}
+                  r={8}
+                  className="fill-background stroke-2"
+                  stroke={isNovel ? "#f59e0b" : "#ffffff"}
+                />
+                <circle
+                  cx={scale(point[0], point[1])[0]}
+                  cy={scale(point[0], point[1])[1]}
+                  r={3}
+                  fill={isNovel ? "#f59e0b" : "#ffffff"}
+                />
+              </g>
+            )}
+          </svg>
+          <div className="flex gap-4 px-2 pb-1 text-xs text-muted">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Classic intrusion
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-accent-ai inline-block" /> AI-native attack
+            </span>
+            {point && (
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-white inline-block" /> Your snippet
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {SAMPLES.map((s, i) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setText(s);
+                  setSelectedSample(i);
+                }}
+                className={`text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
+                  selectedSample === i
+                    ? "border-accent bg-accent/15 text-accent"
+                    : "border-panel-border text-muted hover:text-foreground"
+                }`}
+              >
+                {s.length > 42 ? s.slice(0, 42) + "..." : s}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setSelectedSample(null);
+            }}
+            rows={4}
+            className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
+          />
+          <div className="mt-3">
+            <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
+              Plot this snippet
+            </PrimaryButton>
+          </div>
+          {error && <ErrorNote message={error} />}
+
+          {nearest && (
+            <div className="text-sm border border-panel-border rounded px-3 py-3 mt-4 bg-black/20">
+              {isNovel ? (
+                <p className="text-amber-300">
+                  No close precedent -- this lands further from every case than the cases typically
+                  sit from each other. Possibly novel.
+                </p>
+              ) : (
+                <>
+                  <p className="text-muted mb-1">Nearest on the map:</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">
+                      {nearest.case_id} -- {nearest.case_name}
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <FamilyBadge family={nearest.attack_family} />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}

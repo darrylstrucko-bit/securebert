@@ -74,3 +74,17 @@ export async function clusterCase(caseId: string, noiseCount = 40, seed?: number
   if (!res.ok) throw new Error(`securebert-api /cluster returned ${res.status}: ${await res.text()}`);
   return res.json();
 }
+
+// [x, y] in the same fixed 2D space lib/data/static-pool.json's corpusMap was
+// precomputed in (see securebert-api/app/corpus.py's project()).
+export async function projectText(text: string): Promise<[number, number]> {
+  const res = await fetch(`${requireBaseUrl()}/project`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) throw new Error(`securebert-api /project returned ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.coords as [number, number];
+}

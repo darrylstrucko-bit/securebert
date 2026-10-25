@@ -39,7 +39,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
 
   return (
     <Panel
-      title="2. Is This a Known Pattern?"
+      title="Is This a Known Pattern?"
       subtitle="Paste a new, unlabeled incident description. SecureBERT retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
     >
       <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">

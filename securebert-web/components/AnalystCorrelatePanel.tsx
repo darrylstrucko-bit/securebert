@@ -96,7 +96,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
 
   return (
     <Panel
-      title="1. Correlate These Alerts"
+      title="Correlate These Alerts"
       subtitle="Pick a case. The table shows the full unlabeled pile -- its real alerts mixed into ~40 noise fragments -- before SecureBERT ever runs. Run correlation to see which rows it picks out."
     >
       <div className="flex flex-wrap gap-1.5 mb-4">

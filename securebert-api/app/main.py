@@ -73,3 +73,20 @@ def cases():
     if not corpus.ready():
         raise HTTPException(503, "corpus embeddings not built yet -- run scripts/build_embeddings.py")
     return {"cases": corpus.list_cases()}
+
+
+class ProjectRequest(BaseModel):
+    text: str
+
+
+# Corpus Map's only live call: embeds the submitted snippet, then projects it into
+# the same fixed 2D space as the 7 precomputed case positions (see corpus.project).
+# No Groq call -- this is the one use case that's pure SecureBERT.
+@app.post("/project")
+def project(req: ProjectRequest):
+    if not req.text.strip():
+        raise HTTPException(400, "text must not be empty")
+    if not corpus.ready():
+        raise HTTPException(503, "corpus embeddings not built yet -- run scripts/build_embeddings.py")
+    vector = model.embed(req.text)
+    return {"coords": corpus.project(vector)}

@@ -22,17 +22,50 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+from sklearn.decomposition import PCA
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app import corpus  # noqa: E402
 
 OUT_PATH = ROOT / "data" / "static_frontend_data.json"
+PCA_OUT_PATH = ROOT / "data" / "pca_projection.json"
 
 STRIP_FIELDS = {"ground_truth", "in_detected_cluster"}
 
 
+def build_corpus_map(case_corpus):
+    # Fit once here, on the 7 case-level vectors, and persist mean/components so
+    # app/corpus.py's live /project endpoint reuses the exact same 2D basis for a
+    # submitted snippet -- a fresh per-request PCA fit would give every submission
+    # its own incompatible space, making its plotted position meaningless next to
+    # these 7 fixed points.
+    vectors = np.array([c["vector"] for c in case_corpus], dtype=np.float32)
+    pca = PCA(n_components=2)
+    coords = pca.fit_transform(vectors)
+
+    PCA_OUT_PATH.write_text(
+        json.dumps({"mean": pca.mean_.tolist(), "components": pca.components_.tolist()}),
+        encoding="utf-8",
+    )
+    print(f"Wrote {PCA_OUT_PATH} (explained variance: {pca.explained_variance_ratio_.sum():.2f})")
+
+    return [
+        {
+            "case_id": c["case_id"],
+            "case_name": c["case_name"],
+            "attack_family": c["attack_family"],
+            "x": float(coords[i][0]),
+            "y": float(coords[i][1]),
+        }
+        for i, c in enumerate(case_corpus)
+    ]
+
+
 def main():
+    case_corpus, _ = corpus._load()
     cases = corpus.list_cases()
     pools = {}
     for c in cases:
@@ -48,7 +81,11 @@ def main():
         }
         print(f"  {c['case_id']}: {result['pool_size']} items (answer fields stripped)")
 
-    OUT_PATH.write_text(json.dumps({"cases": cases, "pools": pools}), encoding="utf-8")
+    corpus_map = build_corpus_map(case_corpus)
+
+    OUT_PATH.write_text(
+        json.dumps({"cases": cases, "pools": pools, "corpusMap": corpus_map}), encoding="utf-8"
+    )
     print(f"Wrote {OUT_PATH}")
 
 
