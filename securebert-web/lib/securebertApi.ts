@@ -41,8 +41,11 @@ export type PoolItem = {
   mitre_techniques: string[];
   mitre_atlas_techniques: string[];
   risk_score: number | null;
-  ground_truth: string; // case_id this fragment really belongs to, or "noise"
-  in_detected_cluster: boolean;
+  // Absent in the statically-bundled pre-run pool (see lib/data/static-pool.json) --
+  // only a live /api/correlate response reveals these, so they're optional here
+  // rather than faked with a placeholder value that could look like a real answer.
+  ground_truth?: string; // case_id this fragment really belongs to, or "noise"
+  in_detected_cluster?: boolean;
 };
 
 export type ClusterResult = {
@@ -70,11 +73,4 @@ export async function clusterCase(caseId: string, noiseCount = 40, seed?: number
   });
   if (!res.ok) throw new Error(`securebert-api /cluster returned ${res.status}: ${await res.text()}`);
   return res.json();
-}
-
-export async function listCases(): Promise<{ case_id: string; case_name: string; attack_family: string }[]> {
-  const res = await fetch(`${requireBaseUrl()}/cases`, { signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error(`securebert-api /cases returned ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.cases;
 }

@@ -81,6 +81,22 @@ export function FrameworkBadges({
   );
 }
 
+// Surfaces Groq's risk score at the case-title level, next to FamilyBadge, instead of
+// leaving it buried in narrative prose where it's easy to miss.
+export function RiskBadge({ score, confidence }: { score: number; confidence: string | null }) {
+  const color =
+    score >= 67
+      ? "border-red-400/50 text-red-300 bg-red-400/10"
+      : score >= 34
+        ? "border-amber-400/50 text-amber-300 bg-amber-400/10"
+        : "border-green-400/50 text-green-300 bg-green-400/10";
+  return (
+    <span className={`inline-block text-xs font-mono-ui px-2 py-0.5 rounded border ${color}`}>
+      Risk {score}/100{confidence ? ` · ${confidence} confidence` : ""}
+    </span>
+  );
+}
+
 export function PrimaryButton(
   props: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; loadingLabel?: string }
 ) {

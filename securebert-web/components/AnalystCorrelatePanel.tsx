@@ -1,99 +1,87 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Panel, FamilyBadge, PrimaryButton, ErrorNote, loadingLabelFor } from "./ui";
+import { useMemo, useState } from "react";
+import { Panel, FamilyBadge, RiskBadge, PrimaryButton, ErrorNote, loadingLabelFor } from "./ui";
 import AlertTable from "./AlertTable";
 import Timeline from "./Timeline";
+import { fetchJson } from "@/lib/fetchJson";
 import type { ClusterResult } from "@/lib/securebertApi";
+import staticData from "@/lib/data/static-pool.json";
 
 type CaseOption = { case_id: string; case_name: string; attack_family: string };
+type CorrelateResponse = { cluster: ClusterResult; narrative: string; riskScore: number | null; confidence: string | null };
+
+// AI-native cases first -- that's the headline differentiator, lead with it. This
+// (and everything else in staticData) is bundled with the web app, not fetched --
+// see lib/data/static-pool.json's header comment. It never needs Render, so the
+// case chips and the unlabeled haystack table render instantly, before the model
+// service is even known to be awake. Only "Run correlation" below is a live call.
+const CASES: CaseOption[] = [...staticData.cases].sort((a, b) =>
+  a.attack_family === b.attack_family ? 0 : a.attack_family === "ai_attack" ? -1 : 1
+);
+
+function staticPoolFor(caseId: string): ClusterResult {
+  const p = (staticData.pools as Record<string, { pool_size: number; real_alert_count: number; noise_count: number; pool: unknown[] }>)[caseId];
+  return {
+    case_id: caseId,
+    pool_size: p.pool_size,
+    real_alert_count: p.real_alert_count,
+    noise_count: p.noise_count,
+    detected_count: 0,
+    pool: p.pool as ClusterResult["pool"],
+    ground_truth_reveal: {
+      real_alerts_in_case: 0,
+      correctly_grouped: 0,
+      missed: 0,
+      noise_fragments_in_detected_cluster: 0,
+      noise_fragments_correctly_excluded: 0,
+    },
+  };
+}
 
 export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolean }) {
-  const [cases, setCases] = useState<CaseOption[]>([]);
-  const [caseId, setCaseId] = useState<string>("");
-  const [pool, setPool] = useState<ClusterResult | null>(null);
-  const [poolLoading, setPoolLoading] = useState(false);
-  const [poolError, setPoolError] = useState<string | null>(null);
+  const [caseId, setCaseId] = useState<string>(CASES[0]?.case_id ?? "");
+  const [pool, setPool] = useState<ClusterResult | null>(() => (caseId ? staticPoolFor(caseId) : null));
 
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [narrative, setNarrative] = useState<string | null>(null);
+  const [riskScore, setRiskScore] = useState<number | null>(null);
+  const [confidence, setConfidence] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [rightTab, setRightTab] = useState<"timeline" | "narrative">("timeline");
 
-  // Retries on every modelWarm change (not just mount) -- if this fires during
-  // Render's cold-start window it fails outright (confirmed live), and with no
-  // retry the whole panel was stuck permanently since caseId never gets set.
-  // PersonaApp's wake poll means modelWarm flips true again shortly after, which
-  // is exactly when this should try again.
-  const casesLoaded = useRef(false);
-  useEffect(() => {
-    if (casesLoaded.current) return;
-    fetch("/api/cases")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.cases) {
-          // AI-native cases first -- that's the headline differentiator, lead with it.
-          const sorted = [...d.cases].sort((a: CaseOption, b: CaseOption) =>
-            a.attack_family === b.attack_family ? 0 : a.attack_family === "ai_attack" ? -1 : 1
-          );
-          casesLoaded.current = true;
-          setPoolError(null);
-          setCases(sorted);
-          const aiFirst = sorted.find((c: CaseOption) => c.attack_family === "ai_attack");
-          setCaseId(aiFirst?.case_id ?? sorted[0]?.case_id ?? "");
-        }
-      })
-      .catch(() => setPoolError("Could not reach securebert-api to load the case list -- retrying once it wakes up."));
-  }, [modelWarm]);
-
-  // Fetch the unlabeled pool (the "haystack") the moment a case is picked -- this is
-  // pure numpy over precomputed vectors server-side, no model call, so it's fast even
-  // on a cold Render instance. Highlighting stays off until "Run correlation" is clicked.
-  useEffect(() => {
-    if (!caseId) return;
-    // Intentional: resetting this panel's local state when the selected case changes,
-    // right before kicking off the fetch for the new case. Not a cascading-render
-    // concern in practice -- there's no circular dependency back onto caseId.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPoolLoading(true);
-    setPoolError(null);
-    setPool(null);
+  // Switching cases resets back to that case's static (unanswered) pool -- a live
+  // "Run correlation" result only applies to the case it was run for. Done directly
+  // in the click handler (not an effect keyed on caseId): this isn't synchronizing
+  // with an external system, it's resetting state in response to a user action.
+  function selectCase(id: string) {
+    setCaseId(id);
+    setPool(staticPoolFor(id));
     setNarrative(null);
+    setRiskScore(null);
+    setConfidence(null);
     setHighlighted(false);
     setRevealed(false);
     setRunError(null);
     setRightTab("timeline");
-
-    fetch("/api/pool", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ case_id: caseId }),
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Request failed.");
-        setPool(data.cluster);
-      })
-      .catch((err) => setPoolError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setPoolLoading(false));
-  }, [caseId]);
+  }
 
   async function run() {
     if (!caseId) return;
     setRunning(true);
     setRunError(null);
     try {
-      const res = await fetch("/api/correlate", {
+      const data = await fetchJson<CorrelateResponse>("/api/correlate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ case_id: caseId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Request failed.");
-      setPool(data.cluster); // identical pool, now carrying the same cluster assignment
+      setPool(data.cluster); // now carrying the real cluster assignment + ground truth
       setNarrative(data.narrative);
+      setRiskScore(data.riskScore);
+      setConfidence(data.confidence);
       setHighlighted(true);
       setRightTab("timeline");
     } catch (err) {
@@ -103,7 +91,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
     }
   }
 
-  const selected = cases.find((c) => c.case_id === caseId);
+  const selected = useMemo(() => CASES.find((c) => c.case_id === caseId), [caseId]);
   const detected = pool?.pool.filter((a) => a.in_detected_cluster) ?? [];
 
   return (
@@ -112,10 +100,10 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       subtitle="Pick a case. The table shows the full unlabeled pile -- its real alerts mixed into ~40 noise fragments -- before SecureBERT ever runs. Run correlation to see which rows it picks out."
     >
       <div className="flex flex-wrap gap-1.5 mb-4">
-        {cases.map((c) => (
+        {CASES.map((c) => (
           <button
             key={c.case_id}
-            onClick={() => setCaseId(c.case_id)}
+            onClick={() => selectCase(c.case_id)}
             className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors cursor-pointer ${
               c.case_id === caseId
                 ? c.attack_family === "ai_attack"
@@ -130,13 +118,12 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       </div>
 
       {selected && (
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
           <span className="text-sm font-medium">{selected.case_name}</span>
           <FamilyBadge family={selected.attack_family} />
+          {highlighted && riskScore !== null && <RiskBadge score={riskScore} confidence={confidence} />}
         </div>
       )}
-
-      {poolError && <ErrorNote message={poolError} />}
 
       {pool && (
         <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">
@@ -173,7 +160,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
           </div>
 
           <div>
-            {!highlighted && !poolLoading && (
+            {!highlighted && (
               <p className="text-sm text-muted border border-dashed border-panel-border rounded-md p-4">
                 Click &ldquo;Run correlation&rdquo; to see a timeline reconstructed directly from
                 SecureBERT&rsquo;s detected alerts, plus Groq&rsquo;s narrative read of the same sequence.

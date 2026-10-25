@@ -1,6 +1,10 @@
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
-export async function askGroq(system: string, user: string, maxTokens = 700): Promise<string> {
+export async function askGroq(
+  system: string,
+  user: string,
+  options?: { maxTokens?: number; jsonMode?: boolean }
+): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
 
@@ -13,7 +17,7 @@ export async function askGroq(system: string, user: string, maxTokens = 700): Pr
     body: JSON.stringify({
       model: GROQ_MODEL,
       temperature: 0.3,
-      max_tokens: maxTokens,
+      max_tokens: options?.maxTokens ?? 700,
       // gpt-oss-120b is a reasoning model: by default it can spend most/all of
       // max_tokens on hidden reasoning before ever writing the answer, finishing
       // with finish_reason "length" and an EMPTY content field -- confirmed
@@ -21,6 +25,7 @@ export async function askGroq(system: string, user: string, maxTokens = 700): Pr
       // went to reasoning, 0 left for content). We want the prose, not a visible
       // chain of thought, so reasoning effort is capped low.
       reasoning_effort: "low",
+      ...(options?.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

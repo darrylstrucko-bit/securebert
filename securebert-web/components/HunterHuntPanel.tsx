@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, loadingLabelFor } from "./ui";
+import { fetchJson } from "@/lib/fetchJson";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
 const SAMPLES = [
@@ -23,13 +24,11 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch("/api/hunt", {
+      const data = await fetchJson<{ results: RetrieveResult[]; huntPlan: string }>("/api/hunt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hypothesis, k: 3 }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Request failed.");
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

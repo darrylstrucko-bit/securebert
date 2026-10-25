@@ -41,17 +41,25 @@ export async function POST(request: Request) {
     "may cite for it -- never invent, guess, or substitute a different ID, even a plausible-sounding",
     "one; if an alert is [untagged], do not attribute any technique ID to it. Narrate the most likely",
     "attack sequence these fragments describe, in chronological/causal order as best you can infer it.",
-    "Give an overall risk score (0-100) and a confidence level (Low/Medium/High) for whether this is a",
-    "real, connected attack sequence versus unrelated noise that happened to cluster together. Be",
-    "direct about uncertainty if the alerts don't cohere well.",
-    "Respond in under 220 words of plain prose, no markdown headers.",
+    "Be direct about uncertainty if the alerts don't cohere well.",
+    'Respond with a single JSON object with exactly these keys: "narrative" (a plain-prose string,',
+    'under 220 words, no markdown headers), "risk_score" (an integer 0-100, your overall risk score',
+    'for whether this is a real, connected attack sequence versus unrelated noise that happened to',
+    'cluster together), and "confidence" (one of "Low", "Medium", "High").',
   ].join(" ");
 
   const user = `Alert fragments SecureBERT grouped into one cluster (${detected.length} of ${cluster.pool_size} total, unlabeled pile):\n\n${alertLines}`;
 
   let narrative = "";
+  let riskScore: number | null = null;
+  let confidence: string | null = null;
   try {
-    narrative = await askGroq(system, user);
+    const raw = await askGroq(system, user, { jsonMode: true });
+    const parsed = JSON.parse(raw);
+    narrative = typeof parsed.narrative === "string" ? parsed.narrative : "";
+    riskScore = typeof parsed.risk_score === "number" ? parsed.risk_score : null;
+    confidence = typeof parsed.confidence === "string" ? parsed.confidence : null;
+    if (!narrative) throw new Error("Groq's JSON response was missing a narrative.");
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
@@ -59,5 +67,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ cluster, narrative });
+  return NextResponse.json({ cluster, narrative, riskScore, confidence });
 }
