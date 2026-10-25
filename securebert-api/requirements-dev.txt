@@ -1,0 +1,5 @@
+# Only needed to regenerate data/model_onnx/ via scripts/export_onnx.py.
+# Never installed on Render -- the whole point of the ONNX export is that the
+# deployed app never imports torch.
+torch>=2.9
+optimum[onnxruntime]>=1.23
