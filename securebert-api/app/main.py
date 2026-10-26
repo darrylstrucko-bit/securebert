@@ -54,7 +54,7 @@ def retrieve(req: RetrieveRequest):
 
 class ClusterRequest(BaseModel):
     case_id: str
-    noise_count: int = 40
+    noise_count: int = 80
     seed: Optional[int] = None
 
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Panel, FamilyBadge, RiskBadge, PrimaryButton, ErrorNote, loadingLabelFor } from "./ui";
+import { useEffect, useMemo, useState } from "react";
+import { Panel, FamilyBadge, RiskBadge, ConfidenceBadge, Narrative, PrimaryButton, ErrorNote } from "./ui";
 import AlertTable from "./AlertTable";
 import Timeline from "./Timeline";
 import { fetchJson } from "@/lib/fetchJson";
@@ -42,6 +42,15 @@ function staticPoolFor(caseId: string): ClusterResult {
 export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolean }) {
   const [caseId, setCaseId] = useState<string>(CASES[0]?.case_id ?? "");
   const [pool, setPool] = useState<ClusterResult | null>(() => (caseId ? staticPoolFor(caseId) : null));
+  // Resolved only after mount (see lib/resolveTime.ts) -- computing Date.now()
+  // during render would bake a build-time timestamp into the static HTML and
+  // mismatch the client's real "now" at hydration.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  // Reading the system clock is exactly the kind of external-system sync an
+  // effect is for -- Date.now() isn't knowable at render time (it would differ
+  // between the server's build-time render and the client's real "now").
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setNowMs(Date.now()), []);
 
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -97,7 +106,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
   return (
     <Panel
       title="Correlate These Alerts"
-      subtitle="Pick a case. The table shows the full unlabeled pile -- its real alerts mixed into ~40 noise fragments -- before SecureBERT ever runs. Run correlation to see which rows it picks out."
+      subtitle="One of 7 case studies, its real alerts mixed into ~80 noise fragments -- before SecureBERT 2.0 ever runs. Run correlation to see which rows it picks out."
     >
       <div className="flex flex-wrap gap-1.5 mb-4">
         {CASES.map((c) => (
@@ -121,7 +130,8 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <span className="text-sm font-medium">{selected.case_name}</span>
           <FamilyBadge family={selected.attack_family} />
-          {highlighted && riskScore !== null && <RiskBadge score={riskScore} confidence={confidence} />}
+          {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
+          {highlighted && <ConfidenceBadge confidence={confidence} />}
         </div>
       )}
 
@@ -132,11 +142,11 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
               <span className="text-xs text-muted">
                 {pool.pool_size} unlabeled alerts ({pool.real_alert_count} real, {pool.noise_count} noise)
               </span>
-              <PrimaryButton onClick={run} loading={running} loadingLabel={loadingLabelFor(modelWarm)}>
+              <PrimaryButton onClick={run} loading={running} modelWarm={modelWarm}>
                 Run correlation
               </PrimaryButton>
             </div>
-            <AlertTable pool={pool.pool} caseId={caseId} highlighted={highlighted} revealed={revealed} />
+            <AlertTable pool={pool.pool} caseId={caseId} highlighted={highlighted} revealed={revealed} nowMs={nowMs} />
             {runError && <ErrorNote message={runError} />}
             {highlighted && (
               <button
@@ -163,7 +173,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
             {!highlighted && (
               <p className="text-sm text-muted border border-dashed border-panel-border rounded-md p-4">
                 Click &ldquo;Run correlation&rdquo; to see a timeline reconstructed directly from
-                SecureBERT&rsquo;s detected alerts, plus Groq&rsquo;s narrative read of the same sequence.
+                SecureBERT 2.0&rsquo;s detected alerts, plus Groq&rsquo;s narrative read of the same sequence.
               </p>
             )}
             {highlighted && (
@@ -183,12 +193,8 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
                     </button>
                   ))}
                 </div>
-                {rightTab === "timeline" && detected.length > 0 && <Timeline items={detected} />}
-                {rightTab === "narrative" && narrative && (
-                  <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed whitespace-pre-wrap">
-                    {narrative}
-                  </div>
-                )}
+                {rightTab === "timeline" && detected.length > 0 && <Timeline items={detected} nowMs={nowMs} />}
+                {rightTab === "narrative" && narrative && <Narrative text={narrative} />}
               </>
             )}
           </div>

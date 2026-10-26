@@ -1,12 +1,12 @@
 import type { PoolItem } from "@/lib/securebertApi";
 import { FrameworkBadges } from "./ui";
+import { formatDateTime, sortByMinutesAgoDesc } from "@/lib/resolveTime";
 
-// Sorted directly off each alert's own `time` field, not Groq's narrated order --
-// an objective, data-derived sequence to sit next to the LLM's prose interpretation
-// of the same alerts. Both "HH:MM" and "YYYY-MM-DD HH:MM" sort correctly as plain
-// strings since they're already zero-padded/ISO-ordered.
-export default function Timeline({ items }: { items: PoolItem[] }) {
-  const sorted = [...items].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
+// Sorted directly off each alert's own minutes_ago field, not Groq's narrated
+// order -- an objective, data-derived sequence to sit next to the LLM's prose
+// interpretation of the same alerts.
+export default function Timeline({ items, nowMs }: { items: PoolItem[]; nowMs: number | null }) {
+  const sorted = sortByMinutesAgoDesc(items);
 
   return (
     <div className="space-y-0">
@@ -17,7 +17,7 @@ export default function Timeline({ items }: { items: PoolItem[] }) {
             {i < sorted.length - 1 && <span className="w-px flex-1 bg-panel-border" />}
           </div>
           <div className="pb-4 min-w-0">
-            <div className="text-xs font-mono-ui text-muted">{a.time ?? "--"}</div>
+            <div className="text-xs font-mono-ui text-muted">{formatDateTime(a.minutes_ago, nowMs)}</div>
             <div className="text-sm font-medium">{a.title}</div>
             {a.why_it_matters && <p className="text-xs text-muted mt-0.5">{a.why_it_matters}</p>}
             <FrameworkBadges

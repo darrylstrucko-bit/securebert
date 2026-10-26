@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SecureBERT + AIA Correlation",
+  title: "SecureBERT 2.0 AI Investigation Agent",
   description:
-    "A SecureBERT-grounded correlation and retrieval demo spanning classic intrusions and AI-native attacks, mapped to MITRE ATT&CK and ATLAS.",
+    "Four SecureBERT 2.0-grounded correlation and retrieval demos spanning classic intrusions and AI-native attacks, mapped to MITRE ATT&CK and ATLAS.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

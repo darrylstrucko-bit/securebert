@@ -35,7 +35,7 @@ export type PoolItem = {
   source: string | null;
   category: string | null;
   severity: string | null;
-  time: string | null;
+  minutes_ago: number | null;
   description: string | null;
   why_it_matters: string | null;
   mitre_techniques: string[];
@@ -64,7 +64,7 @@ export type ClusterResult = {
   };
 };
 
-export async function clusterCase(caseId: string, noiseCount = 40, seed?: number): Promise<ClusterResult> {
+export async function clusterCase(caseId: string, noiseCount = 80, seed?: number): Promise<ClusterResult> {
   const res = await fetch(`${requireBaseUrl()}/cluster`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

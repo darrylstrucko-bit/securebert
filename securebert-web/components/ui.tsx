@@ -1,13 +1,21 @@
-export function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+"use client";
+
+import { useState } from "react";
+
+export function Panel({ title, subtitle, children }: { title: string; subtitle: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="rounded-lg border border-panel-border bg-panel/40 p-5">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="text-sm text-muted mt-1 mb-4">{subtitle}</p>
+      <div className="text-sm text-muted mt-1 mb-4">{subtitle}</div>
       {children}
     </section>
   );
 }
 
+// Blue/purple (accent/accent-ai) means ONE thing everywhere in this app: classic
+// intrusion vs. AI-native attack. Deliberately not reused for anything else (e.g.
+// Analyst/Hunter persona), which used to collide with this and make both axes
+// read as related when they aren't.
 export function FamilyBadge({ family }: { family: string }) {
   const isAi = family === "ai_attack";
   return (
@@ -81,9 +89,10 @@ export function FrameworkBadges({
   );
 }
 
-// Surfaces Groq's risk score at the case-title level, next to FamilyBadge, instead of
-// leaving it buried in narrative prose where it's easy to miss.
-export function RiskBadge({ score, confidence }: { score: number; confidence: string | null }) {
+// Risk and confidence are two different claims (how bad, vs. how sure) -- kept as
+// two separate badges rather than one combined string so each can be read (and
+// color-judged, for risk) independently.
+export function RiskBadge({ score }: { score: number }) {
   const color =
     score >= 67
       ? "border-red-400/50 text-red-300 bg-red-400/10"
@@ -92,23 +101,102 @@ export function RiskBadge({ score, confidence }: { score: number; confidence: st
         : "border-green-400/50 text-green-300 bg-green-400/10";
   return (
     <span className={`inline-block text-xs font-mono-ui px-2 py-0.5 rounded border ${color}`}>
-      Risk {score}/100{confidence ? ` · ${confidence} confidence` : ""}
+      Risk {score}/100
+    </span>
+  );
+}
+
+export function ConfidenceBadge({ confidence }: { confidence: string | null }) {
+  if (!confidence) return null;
+  return (
+    <span className="inline-block text-xs font-mono-ui px-2 py-0.5 rounded border border-panel-border text-muted bg-white/5">
+      {confidence} confidence
+    </span>
+  );
+}
+
+// Splits narrative prose into paragraphs (blank-line separated, per the system
+// prompts that generate this text) instead of rendering one dense unbroken
+// block. Falls back gracefully to a single paragraph if the model didn't
+// actually include blank lines.
+export function Narrative({ text }: { text: string }) {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return (
+    <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed space-y-3">
+      {(paragraphs.length > 0 ? paragraphs : [text]).map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </div>
+  );
+}
+
+// A small "i" button that reveals an explanation on click (not hover, so it
+// works the same on touch devices) -- for jargon that's load-bearing to
+// understanding a panel (e.g. "PCA") but too long to put in the subtitle.
+export function InfoButton({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-block align-middle ml-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={label}
+        className="inline-flex items-center justify-center h-4 w-4 rounded-full border border-muted text-muted text-[10px] font-mono-ui hover:border-accent hover:text-accent cursor-pointer"
+      >
+        i
+      </button>
+      {open && (
+        <div className="absolute z-20 top-full mt-2 left-0 w-72 text-xs leading-relaxed bg-panel border border-panel-border rounded-md p-3 shadow-lg text-left">
+          {children}
+        </div>
+      )}
     </span>
   );
 }
 
 export function PrimaryButton(
-  props: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; loadingLabel?: string }
+  props: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    loading?: boolean;
+    modelWarm?: boolean;
+  }
 ) {
-  const { loading, loadingLabel, children, disabled, className, ...rest } = props;
+  const { loading, modelWarm, children, disabled, className, onClick, ...rest } = props;
+  const [showWakeNote, setShowWakeNote] = useState(false);
+  const notReady = modelWarm === false && !loading;
+
+  function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
+    if (notReady) {
+      setShowWakeNote(true);
+      window.setTimeout(() => setShowWakeNote(false), 5000);
+    }
+    onClick?.(e);
+  }
+
   return (
-    <button
-      {...rest}
-      disabled={disabled || loading}
-      className={`px-4 py-2 rounded-md bg-accent text-black text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:brightness-110 transition ${className ?? ""}`}
-    >
-      {loading ? (loadingLabel ?? "Working...") : children}
-    </button>
+    <div className="relative inline-block">
+      <button
+        {...rest}
+        onClick={handleClick}
+        disabled={disabled || loading}
+        className={`px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:brightness-110 transition ${
+          notReady ? "bg-amber-400 text-black" : "bg-accent text-black"
+        } ${className ?? ""}`}
+      >
+        {loading ? "Working..." : notReady ? `${children} (waking up...)` : children}
+      </button>
+      {showWakeNote && (
+        <div className="absolute z-10 top-full mt-2 left-0 w-72 text-xs leading-relaxed bg-panel border border-amber-400/40 rounded-md p-3 shadow-lg">
+          <span className="font-medium text-amber-300">Still waking up.</span>{" "}
+          <span className="text-muted">
+            The model service runs on a free instance that sleeps when idle -- your click will go
+            through, it just needs up to a minute the first time.
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -137,18 +225,14 @@ export function WakeBanner({ state }: { state: WakeState }) {
           <>Checking the model service...</>
         ) : (
           <>
-            <span className="font-medium">Waking up the SecureBERT model service.</span> It runs on a
+            <span className="font-medium">Waking up the SecureBERT 2.0 model service.</span> It runs on a
             free Render instance that sleeps when idle -- the first request after a while can take up
             to a minute. This has nothing to do with Groq or the correlation itself; once it&rsquo;s
-            awake, everything below responds normally. Feel free to click a button now, it&rsquo;ll
-            just wait a bit longer this one time.
+            awake, everything below responds normally. The button below will show it&rsquo;s not ready
+            yet -- feel free to click it anyway, it&rsquo;ll just wait a bit longer this one time.
           </>
         )}
       </p>
     </div>
   );
-}
-
-export function loadingLabelFor(modelWarm: boolean): string {
-  return modelWarm ? "Working..." : "Waking up model service...";
 }

@@ -39,7 +39,9 @@ export async function POST(request: Request) {
     "Ground every claim in the retrieved matches below -- do not assert a connection to a case that",
     "is not in the list, and only cite a technique ID that appears in that case's own 'tagged",
     "techniques' list -- never invent or guess one. Respond in under 180 words of plain prose, no",
-    "markdown headers.",
+    "markdown headers, structured as exactly 2 paragraphs with one blank line between them (an actual",
+    "empty line, not just a sentence break) -- the first paragraph names the closest match(es) and why,",
+    "the second covers confidence and the recommended next step. Never return it as one single block.",
   ].join(" ");
 
   const user = `New incident description:\n${text}\n\nTop retrieved matches:\n${matchLines}`;

@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     // No seed passed: the backend's fixed default keeps this identical to the
     // /api/pool call the UI already made when the case was selected, so the
     // "Run" step only ever reveals/narrates a pool already on screen.
-    cluster = await clusterCase(caseId, body?.noise_count ?? 40);
+    cluster = await clusterCase(caseId, body?.noise_count ?? 80);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
@@ -43,9 +43,13 @@ export async function POST(request: Request) {
     "attack sequence these fragments describe, in chronological/causal order as best you can infer it.",
     "Be direct about uncertainty if the alerts don't cohere well.",
     'Respond with a single JSON object with exactly these keys: "narrative" (a plain-prose string,',
-    'under 220 words, no markdown headers), "risk_score" (an integer 0-100, your overall risk score',
-    'for whether this is a real, connected attack sequence versus unrelated noise that happened to',
-    'cluster together), and "confidence" (one of "Low", "Medium", "High").',
+    "under 220 words, no markdown headers, structured as exactly 2 paragraphs joined by a literal",
+    '"\\n\\n" inside the JSON string value -- the first paragraph narrates the attack sequence itself',
+    "(what happened, in order), the second paragraph covers why it reads as a real, connected",
+    'sequence versus coincidental noise. Never return the narrative as one single paragraph.),',
+    '"risk_score" (an integer 0-100, your overall risk score for whether this is a real, connected',
+    'attack sequence versus unrelated noise that happened to cluster together), and "confidence"',
+    '(one of "Low", "Medium", "High").',
   ].join(" ");
 
   const user = `Alert fragments SecureBERT grouped into one cluster (${detected.length} of ${cluster.pool_size} total, unlabeled pile):\n\n${alertLines}`;

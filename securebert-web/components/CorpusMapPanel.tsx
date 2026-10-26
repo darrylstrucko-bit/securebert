@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Panel, PrimaryButton, ErrorNote, FamilyBadge, loadingLabelFor } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
 import { fetchJson } from "@/lib/fetchJson";
 import staticData from "@/lib/data/static-pool.json";
 
 type CaseMapPoint = { case_id: string; case_name: string; attack_family: string; x: number; y: number };
+type AlertMapPoint = { id: string; title: string; ground_truth: string; attack_family: string | null; x: number; y: number };
 
-const CASES: CaseMapPoint[] = staticData.corpusMap;
+const CASES: CaseMapPoint[] = staticData.corpusMap.cases;
+const ALERTS: AlertMapPoint[] = staticData.corpusMap.alerts;
 
 const SAMPLES = [
   "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS.",
@@ -15,17 +17,17 @@ const SAMPLES = [
   "Our new vendor's quarterly report generator just emailed itself a copy of the customer list, which nobody asked it to do.",
 ];
 
-const WIDTH = 560;
-const HEIGHT = 380;
-const PAD = 48;
+const WIDTH = 440;
+const HEIGHT = 300;
+const PAD = 36;
 
 function buildScale() {
-  const xs = CASES.map((c) => c.x);
-  const ys = CASES.map((c) => c.y);
-  const xMin = Math.min(...xs);
-  const xMax = Math.max(...xs);
-  const yMin = Math.min(...ys);
-  const yMax = Math.max(...ys);
+  const allX = [...CASES.map((c) => c.x), ...ALERTS.map((a) => a.x)];
+  const allY = [...CASES.map((c) => c.y), ...ALERTS.map((a) => a.y)];
+  const xMin = Math.min(...allX);
+  const xMax = Math.max(...allX);
+  const yMin = Math.min(...allY);
+  const yMax = Math.max(...allY);
   const xSpan = xMax - xMin || 1;
   const ySpan = yMax - yMin || 1;
   return (x: number, y: number): [number, number] => [
@@ -38,6 +40,8 @@ function dist(ax: number, ay: number, bx: number, by: number) {
   return Math.hypot(ax - bx, ay - by);
 }
 
+const caseById = new Map(CASES.map((c) => [c.case_id, c]));
+
 // A snippet's nearest case counts as "close" if it's no further than the cases'
 // own typical nearest-neighbor spacing -- a simple, visible-on-the-plot
 // definition of "resembles something we've seen," not a precision claim.
@@ -45,7 +49,7 @@ const NOVELTY_THRESHOLD = (() => {
   const nearest = CASES.map((c) =>
     Math.min(...CASES.filter((o) => o.case_id !== c.case_id).map((o) => dist(c.x, c.y, o.x, o.y)))
   );
-  return (Math.max(...nearest) * 1.3).toFixed(2);
+  return Math.max(...nearest) * 1.3;
 })();
 
 export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
@@ -81,53 +85,125 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
         .map((c) => ({ ...c, d: dist(point[0], point[1], c.x, c.y) }))
         .sort((a, b) => a.d - b.d)[0]
     : null;
-  const isNovel = nearest ? nearest.d > Number(NOVELTY_THRESHOLD) : false;
+  const isNovel = nearest ? nearest.d > NOVELTY_THRESHOLD : false;
 
   return (
     <Panel
       title="Corpus Map"
-      subtitle="A 2D projection (PCA) of all 7 cases' SecureBERT embeddings -- classic intrusions on one side, AI-native attacks on the other. No Groq call: submit a snippet and see exactly where the encoder places it, nothing narrated or interpreted on top."
+      subtitle={
+        <>
+          Every case and alert, placed by SecureBERT 2.0&rsquo;s embedding and squashed to 2D with
+          PCA
+          <InfoButton label="What is PCA?">
+            <span className="font-medium text-foreground">PCA (Principal Component Analysis).</span>{" "}
+            SecureBERT 2.0 turns each piece of text into a vector of hundreds of numbers. PCA finds
+            the two directions where that data spreads out the most, and plots everything using just
+            those two -- compressing hundreds of dimensions down to the flat chart below. The axes
+            (PC1, PC2) have no built-in meaning like &ldquo;risk&rdquo; -- they&rsquo;re just whichever
+            directions happened to capture the most spread in this data. Empirically here, PC1 roughly
+            separates classic intrusions from AI-native attacks, but that fell out of the data, it
+            wasn&rsquo;t designed in.
+          </InfoButton>
+          . No Groq call: the only use case that&rsquo;s pure SecureBERT 2.0, nothing narrated on top.
+        </>
+      }
     >
-      <div className="grid md:grid-cols-[1fr_320px] gap-6 items-start">
+      <div className="grid md:grid-cols-[1fr_280px] gap-5 items-start">
         <div className="border border-panel-border rounded-md bg-black/20 p-2">
           <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
+            {/* Spoke lines: each real alert back to its own case's centroid, in that
+                case's family color at low opacity -- a texture showing how tightly a
+                case's own alerts actually cluster around it. */}
+            {ALERTS.filter((a) => a.ground_truth !== "noise").map((a) => {
+              const c = caseById.get(a.ground_truth);
+              if (!c) return null;
+              const [ax, ay] = scale(a.x, a.y);
+              const [cx, cy] = scale(c.x, c.y);
+              const isAi = c.attack_family === "ai_attack";
+              return (
+                <line
+                  key={`spoke-${a.id}`}
+                  x1={ax}
+                  y1={ay}
+                  x2={cx}
+                  y2={cy}
+                  className={isAi ? "stroke-accent-ai" : "stroke-accent"}
+                  strokeWidth={0.5}
+                  opacity={0.25}
+                />
+              );
+            })}
+
+            {/* Every alert as a small dot -- noise muted gray with no home to point
+                to, real alerts colored by their case's family. */}
+            {ALERTS.map((a) => {
+              const [ax, ay] = scale(a.x, a.y);
+              const isNoise = a.ground_truth === "noise";
+              const isAi = a.attack_family === "ai_attack";
+              return (
+                <circle
+                  key={a.id}
+                  cx={ax}
+                  cy={ay}
+                  r={isNoise ? 1.6 : 2.2}
+                  className={isNoise ? "fill-muted" : isAi ? "fill-accent-ai" : "fill-accent"}
+                  opacity={isNoise ? 0.35 : 0.8}
+                >
+                  <title>{isNoise ? `Noise: ${a.title}` : `${a.ground_truth}: ${a.title}`}</title>
+                </circle>
+              );
+            })}
+
+            {/* The 7 case centroids, on top of everything else. */}
             {CASES.map((c) => {
               const [cx, cy] = scale(c.x, c.y);
               const isAi = c.attack_family === "ai_attack";
               return (
                 <g key={c.case_id}>
-                  <circle cx={cx} cy={cy} r={7} className={isAi ? "fill-accent-ai" : "fill-accent"} opacity={0.85} />
+                  <circle cx={cx} cy={cy} r={6} className={isAi ? "fill-accent-ai" : "fill-accent"} stroke="#0a0e14" strokeWidth={1.5} />
                   <title>{`${c.case_id} -- ${c.case_name}`}</title>
-                  <text x={cx} y={cy - 12} textAnchor="middle" className="fill-muted text-[9px] font-mono-ui">
+                  <text x={cx} y={cy - 10} textAnchor="middle" className="fill-muted text-[8px] font-mono-ui">
                     {c.case_id}
                   </text>
                 </g>
               );
             })}
+
             {point && (
               <g>
                 <circle
                   cx={scale(point[0], point[1])[0]}
                   cy={scale(point[0], point[1])[1]}
-                  r={8}
+                  r={7}
                   className="fill-background stroke-2"
                   stroke={isNovel ? "#f59e0b" : "#ffffff"}
                 />
                 <circle
                   cx={scale(point[0], point[1])[0]}
                   cy={scale(point[0], point[1])[1]}
-                  r={3}
+                  r={2.5}
                   fill={isNovel ? "#f59e0b" : "#ffffff"}
                 />
               </g>
             )}
+
+            {/* Axis labels: honest about having no inherent meaning (see info button). */}
+            <text x={WIDTH - 4} y={HEIGHT - 4} textAnchor="end" className="fill-muted text-[8px] font-mono-ui">
+              PC1 &rarr;
+            </text>
+            <text x={4} y={12} textAnchor="start" className="fill-muted text-[8px] font-mono-ui">
+              PC2 &uarr;
+            </text>
           </svg>
-          <div className="flex gap-4 px-2 pb-1 text-xs text-muted">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pb-1 text-xs text-muted">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Classic intrusion
+              <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Classic
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-accent-ai inline-block" /> AI-native attack
+              <span className="h-2 w-2 rounded-full bg-accent-ai inline-block" /> AI-native
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted inline-block opacity-60" /> Noise
             </span>
             {point && (
               <span className="flex items-center gap-1.5">
@@ -166,7 +242,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
           />
           <div className="mt-3">
-            <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
+            <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
               Plot this snippet
             </PrimaryButton>
           </div>

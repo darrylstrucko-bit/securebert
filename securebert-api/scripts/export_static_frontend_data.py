@@ -36,14 +36,14 @@ PCA_OUT_PATH = ROOT / "data" / "pca_projection.json"
 STRIP_FIELDS = {"ground_truth", "in_detected_cluster"}
 
 
-def build_corpus_map(case_corpus):
+def build_corpus_map(case_corpus, alert_pool):
     # Fit once here, on the 7 case-level vectors, and persist mean/components so
     # app/corpus.py's live /project endpoint reuses the exact same 2D basis for a
     # submitted snippet -- a fresh per-request PCA fit would give every submission
     # its own incompatible space, making its plotted position meaningless next to
     # these 7 fixed points.
     vectors = np.array([c["vector"] for c in case_corpus], dtype=np.float32)
-    pca = PCA(n_components=2)
+    pca = PCA(n_components=2, svd_solver="full")
     coords = pca.fit_transform(vectors)
 
     PCA_OUT_PATH.write_text(
@@ -52,7 +52,7 @@ def build_corpus_map(case_corpus):
     )
     print(f"Wrote {PCA_OUT_PATH} (explained variance: {pca.explained_variance_ratio_.sum():.2f})")
 
-    return [
+    cases = [
         {
             "case_id": c["case_id"],
             "case_name": c["case_name"],
@@ -63,9 +63,32 @@ def build_corpus_map(case_corpus):
         for i, c in enumerate(case_corpus)
     ]
 
+    # Every individual alert (real + noise) projected into the SAME 2D space as
+    # the 7 case centroids above, via pca.transform (not a fresh fit) -- so a
+    # case's own alerts can be drawn as small dots clustered around its big dot,
+    # with noise scattered elsewhere. ground_truth is the case_id it really
+    # belongs to, or "noise" -- used for color and for drawing centroid-to-alert
+    # spoke lines, not hidden/answer-like the way the correlate pool's
+    # ground_truth is (Corpus Map has no "Run correlation" reveal state).
+    alert_vectors = np.array([a["vector"] for a in alert_pool], dtype=np.float32)
+    alert_coords = pca.transform(alert_vectors)
+    alerts = [
+        {
+            "id": a["id"],
+            "title": a["title"],
+            "ground_truth": a["ground_truth"],
+            "attack_family": a.get("attack_family"),
+            "x": float(alert_coords[i][0]),
+            "y": float(alert_coords[i][1]),
+        }
+        for i, a in enumerate(alert_pool)
+    ]
+
+    return cases, alerts
+
 
 def main():
-    case_corpus, _ = corpus._load()
+    case_corpus, alert_pool = corpus._load()
     cases = corpus.list_cases()
     pools = {}
     for c in cases:
@@ -81,10 +104,13 @@ def main():
         }
         print(f"  {c['case_id']}: {result['pool_size']} items (answer fields stripped)")
 
-    corpus_map = build_corpus_map(case_corpus)
+    map_cases, map_alerts = build_corpus_map(case_corpus, alert_pool)
 
     OUT_PATH.write_text(
-        json.dumps({"cases": cases, "pools": pools, "corpusMap": corpus_map}), encoding="utf-8"
+        json.dumps(
+            {"cases": cases, "pools": pools, "corpusMap": {"cases": map_cases, "alerts": map_alerts}}
+        ),
+        encoding="utf-8",
     )
     print(f"Wrote {OUT_PATH}")
 

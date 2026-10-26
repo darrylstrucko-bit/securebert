@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, loadingLabelFor } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, Narrative } from "./ui";
 import { fetchJson } from "@/lib/fetchJson";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
@@ -40,7 +40,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
   return (
     <Panel
       title="Is This a Known Pattern?"
-      subtitle="Paste a new, unlabeled incident description. SecureBERT retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
+      subtitle="Paste a new, unlabeled incident description. SecureBERT 2.0 retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
     >
       <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">
         <div>
@@ -72,7 +72,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
             className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
           />
           <div className="mt-3">
-            <PrimaryButton onClick={run} loading={loading} loadingLabel={loadingLabelFor(modelWarm)}>
+            <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
               Find precedent
             </PrimaryButton>
           </div>
@@ -87,9 +87,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
           )}
           {result && (
             <div className="space-y-4">
-              <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed whitespace-pre-wrap">
-                {result.narrative}
-              </div>
+              <Narrative text={result.narrative} />
               <ul className="space-y-2">
                 {result.results.map((r) => (
                   <li key={r.case_id} className="text-sm border border-panel-border rounded px-3 py-2">

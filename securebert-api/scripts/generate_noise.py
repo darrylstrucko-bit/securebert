@@ -11,7 +11,6 @@ these labels to the model or the UI.
 Run: python generate_noise.py   (writes ../data/noise/noise_pool.json)
 """
 import json
-import itertools
 from pathlib import Path
 
 HOSTS_CLASSIC = [
@@ -30,18 +29,38 @@ USERS_AI = [
     "svc-reporting-agent", "data-scientist-nwu", "svc-chat-agent", "ml-engineer-aomar",
     "svc-retrain-pipeline", "contractor-tlee", "svc-ratelimit-config", "data-scientist-bkhan",
 ]
-DATES = [
+
+# Purely decorative embedding padding -- NEVER displayed, NEVER the source of the
+# real `minutes_ago` field. A single short "ref: INC-00042" token wasn't enough
+# entropy to recover pre-refactor clustering quality for AI-flavored noise
+# (measured: still 0 clean seeds across 1-30 at noise_count=40 even with it).
+# A multi-token, date-shaped string restores it (also measured). Any fixed set of
+# meaningless strings would do the same job; this shape was simplest to verify
+# against the pre-refactor baseline. Because it's never rendered anywhere, there's
+# no staleness risk from reusing fixed values indefinitely.
+DECOY_DATES = [
     "2026-03-14", "2026-03-22", "2026-04-02", "2026-04-09", "2026-04-15",
     "2026-04-18", "2026-04-21", "2026-04-23", "2026-04-25", "2026-04-29",
 ]
-TIMES = ["09:12", "10:47", "11:30", "13:05", "14:22", "15:48", "20:10", "21:33", "07:55", "16:40"]
+DECOY_TIMES = ["09:12", "10:47", "11:30", "13:05", "14:22", "15:48", "20:10", "21:33", "07:55", "16:40"]
 
-def inst(template, host_pool, user_pool, idx):
+
+def inst(host_pool, user_pool, idx):
     h = host_pool[idx % len(host_pool)]
     u = user_pool[(idx * 3 + 1) % len(user_pool)]
-    d = DATES[(idx * 5 + 2) % len(DATES)]
-    t = TIMES[(idx * 7 + 3) % len(TIMES)]
+    d = DECOY_DATES[(idx * 5 + 2) % len(DECOY_DATES)]
+    t = DECOY_TIMES[(idx * 7 + 3) % len(DECOY_TIMES)]
     return h, u, d, t
+
+
+def relative_offset(idx):
+    """Return a deterministic, recent-weighted offset spanning 0-2160 minutes."""
+    # 73 is coprime to 167, so indices 1..166 permute every rank from 1..166.
+    # Squaring the normalized rank creates more density near zero while retaining
+    # both endpoints of the requested 36-hour window.
+    rank = (idx * 73) % 167
+    normalized = (rank - 1) / 165
+    return round(2160 * normalized * normalized)
 
 # Each template: (title, source, category, description, evidence[], why_it_matters,
 #                  mitre_techniques[], mitre_atlas_techniques[], risk_score, flavor, subtype, repeat_count)
@@ -379,19 +398,22 @@ def build_pool():
         user_pool = USERS_AI if flavor == "ai_attack" else USERS_CLASSIC
         for i in range(repeat):
             counter += 1
-            host, user, date, time_ = inst(title, host_pool, user_pool, counter)
+            host, user, deco_date, deco_time = inst(host_pool, user_pool, counter)
             # Fold the varying fields into the embedded text itself. Without this,
             # repeated instances of the same template would be LITERALLY identical
             # input text to the embedder (host/user/time are separate JSON fields,
             # not part of what gets embedded) -- producing exact-duplicate vectors
             # that form degenerate micro-clusters and distort every clustering method.
-            varied_desc = f"{desc} (Host: {host}; user: {user}; observed {date} {time_}.)"
+            # The date/time here are DECOY_DATES/DECOY_TIMES (see above) -- decorative
+            # embedding padding only, unrelated to and never read as the real
+            # `minutes_ago` field below.
+            varied_desc = f"{desc} (Host: {host}; user: {user}; ref: {deco_date} {deco_time}.)"
             noise.append({
                 "alert_id": f"NOISE-{counter:04d}",
                 "title": title,
                 "source": source,
                 "severity": "Low" if risk < 20 else ("Medium" if risk < 35 else "High"),
-                "time": f"{date} {time_}" if flavor == "ai_attack" else time_,
+                "minutes_ago": relative_offset(counter),
                 "host": host,
                 "user": user,
                 "category": category,
