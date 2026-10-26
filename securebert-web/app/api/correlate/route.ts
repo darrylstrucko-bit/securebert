@@ -42,14 +42,13 @@ export async function POST(request: Request) {
     "one; if an alert is [untagged], do not attribute any technique ID to it. Narrate the most likely",
     "attack sequence these fragments describe, in chronological/causal order as best you can infer it.",
     "Be direct about uncertainty if the alerts don't cohere well.",
-    'Respond with a single JSON object with exactly these keys: "narrative" (a plain-prose string,',
-    "under 220 words, no markdown headers, structured as exactly 2 paragraphs joined by a literal",
-    '"\\n\\n" inside the JSON string value -- the first paragraph narrates the attack sequence itself',
-    "(what happened, in order), the second paragraph covers why it reads as a real, connected",
-    'sequence versus coincidental noise. Never return the narrative as one single paragraph.),',
-    '"risk_score" (an integer 0-100, your overall risk score for whether this is a real, connected',
-    'attack sequence versus unrelated noise that happened to cluster together), and "confidence"',
-    '(one of "Low", "Medium", "High").',
+    'Respond with a single JSON object with exactly these keys: "paragraph_1" (plain-prose string,',
+    "no markdown, narrating the attack sequence itself -- what happened, in order), \"paragraph_2\"",
+    "(plain-prose string, no markdown, covering why this reads as a real, connected sequence versus",
+    'coincidental noise -- both paragraphs together under 220 words total), "risk_score" (an integer',
+    "0-100, your overall risk score for whether this is a real, connected attack sequence versus",
+    'unrelated noise that happened to cluster together), and "confidence" (one of "Low", "Medium",',
+    '"High").',
   ].join(" ");
 
   const user = `Alert fragments SecureBERT grouped into one cluster (${detected.length} of ${cluster.pool_size} total, unlabeled pile):\n\n${alertLines}`;
@@ -60,7 +59,14 @@ export async function POST(request: Request) {
   try {
     const raw = await askGroq(system, user, { jsonMode: true });
     const parsed = JSON.parse(raw);
-    narrative = typeof parsed.narrative === "string" ? parsed.narrative : "";
+    // Two separate string fields, joined with a REAL newline here in code --
+    // not one field with an embedded "\n\n" escape sequence. Asking the model to
+    // nest an escape sequence inside a JSON string value was unreliable: it would
+    // sometimes echo the literal two-character sequence \n\n from the prompt's
+    // own instructions into the output instead of producing an actual line break.
+    const paragraph1 = typeof parsed.paragraph_1 === "string" ? parsed.paragraph_1 : "";
+    const paragraph2 = typeof parsed.paragraph_2 === "string" ? parsed.paragraph_2 : "";
+    narrative = [paragraph1, paragraph2].filter(Boolean).join("\n\n");
     riskScore = typeof parsed.risk_score === "number" ? parsed.risk_score : null;
     confidence = typeof parsed.confidence === "string" ? parsed.confidence : null;
     if (!narrative) throw new Error("Groq's JSON response was missing a narrative.");

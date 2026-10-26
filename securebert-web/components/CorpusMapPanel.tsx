@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Panel, PrimaryButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
+import { Panel, PrimaryButton, ClearButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
 import { fetchJson } from "@/lib/fetchJson";
 import staticData from "@/lib/data/static-pool.json";
 
@@ -17,9 +17,11 @@ const SAMPLES = [
   "Our new vendor's quarterly report generator just emailed itself a copy of the customer list, which nobody asked it to do.",
 ];
 
-const WIDTH = 440;
-const HEIGHT = 300;
-const PAD = 36;
+// 75% of the original 440x300 -- the map was taking more vertical room than it
+// needed, crowding out everything below it.
+const WIDTH = 330;
+const HEIGHT = 225;
+const PAD = 28;
 
 function buildScale() {
   const allX = [...CASES.map((c) => c.x), ...ALERTS.map((a) => a.x)];
@@ -80,6 +82,13 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
     }
   }
 
+  function clear() {
+    setText("");
+    setSelectedSample(null);
+    setPoint(null);
+    setError(null);
+  }
+
   const nearest = point
     ? [...CASES]
         .map((c) => ({ ...c, d: dist(point[0], point[1], c.x, c.y) }))
@@ -108,113 +117,9 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
         </>
       }
     >
-      <div className="grid md:grid-cols-[1fr_280px] gap-5 items-start">
-        <div className="border border-panel-border rounded-md bg-black/20 p-2">
-          <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
-            {/* Spoke lines: each real alert back to its own case's centroid, in that
-                case's family color at low opacity -- a texture showing how tightly a
-                case's own alerts actually cluster around it. */}
-            {ALERTS.filter((a) => a.ground_truth !== "noise").map((a) => {
-              const c = caseById.get(a.ground_truth);
-              if (!c) return null;
-              const [ax, ay] = scale(a.x, a.y);
-              const [cx, cy] = scale(c.x, c.y);
-              const isAi = c.attack_family === "ai_attack";
-              return (
-                <line
-                  key={`spoke-${a.id}`}
-                  x1={ax}
-                  y1={ay}
-                  x2={cx}
-                  y2={cy}
-                  className={isAi ? "stroke-accent-ai" : "stroke-accent"}
-                  strokeWidth={0.5}
-                  opacity={0.25}
-                />
-              );
-            })}
-
-            {/* Every alert as a small dot -- noise muted gray with no home to point
-                to, real alerts colored by their case's family. */}
-            {ALERTS.map((a) => {
-              const [ax, ay] = scale(a.x, a.y);
-              const isNoise = a.ground_truth === "noise";
-              const isAi = a.attack_family === "ai_attack";
-              return (
-                <circle
-                  key={a.id}
-                  cx={ax}
-                  cy={ay}
-                  r={isNoise ? 1.6 : 2.2}
-                  className={isNoise ? "fill-muted" : isAi ? "fill-accent-ai" : "fill-accent"}
-                  opacity={isNoise ? 0.35 : 0.8}
-                >
-                  <title>{isNoise ? `Noise: ${a.title}` : `${a.ground_truth}: ${a.title}`}</title>
-                </circle>
-              );
-            })}
-
-            {/* The 7 case centroids, on top of everything else. */}
-            {CASES.map((c) => {
-              const [cx, cy] = scale(c.x, c.y);
-              const isAi = c.attack_family === "ai_attack";
-              return (
-                <g key={c.case_id}>
-                  <circle cx={cx} cy={cy} r={6} className={isAi ? "fill-accent-ai" : "fill-accent"} stroke="#0a0e14" strokeWidth={1.5} />
-                  <title>{`${c.case_id} -- ${c.case_name}`}</title>
-                  <text x={cx} y={cy - 10} textAnchor="middle" className="fill-muted text-[8px] font-mono-ui">
-                    {c.case_id}
-                  </text>
-                </g>
-              );
-            })}
-
-            {point && (
-              <g>
-                <circle
-                  cx={scale(point[0], point[1])[0]}
-                  cy={scale(point[0], point[1])[1]}
-                  r={7}
-                  className="fill-background stroke-2"
-                  stroke={isNovel ? "#f59e0b" : "#ffffff"}
-                />
-                <circle
-                  cx={scale(point[0], point[1])[0]}
-                  cy={scale(point[0], point[1])[1]}
-                  r={2.5}
-                  fill={isNovel ? "#f59e0b" : "#ffffff"}
-                />
-              </g>
-            )}
-
-            {/* Axis labels: honest about having no inherent meaning (see info button). */}
-            <text x={WIDTH - 4} y={HEIGHT - 4} textAnchor="end" className="fill-muted text-[8px] font-mono-ui">
-              PC1 &rarr;
-            </text>
-            <text x={4} y={12} textAnchor="start" className="fill-muted text-[8px] font-mono-ui">
-              PC2 &uarr;
-            </text>
-          </svg>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pb-1 text-xs text-muted">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Classic
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-accent-ai inline-block" /> AI-native
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted inline-block opacity-60" /> Noise
-            </span>
-            {point && (
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-white inline-block" /> Your snippet
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="flex flex-wrap gap-1.5 mb-3">
+      <div className="shrink-0">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+          <div className="flex flex-wrap gap-1.5">
             {SAMPLES.map((s, i) => (
               <button
                 key={s}
@@ -232,44 +137,160 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
               </button>
             ))}
           </div>
-          <textarea
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setSelectedSample(null);
-            }}
-            rows={4}
-            className="w-full bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
-          />
-          <div className="mt-3">
-            <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
-              Plot this snippet
-            </PrimaryButton>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <div className="flex gap-2">
+              <ClearButton onClick={clear} />
+              <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
+                Plot this snippet
+              </PrimaryButton>
+            </div>
+            <p className="text-xs text-muted text-right max-w-[220px]">
+              Click &ldquo;Plot this snippet&rdquo; to see where SecureBERT 2.0 places it on the map.
+            </p>
           </div>
-          {error && <ErrorNote message={error} />}
+        </div>
+        <textarea
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setSelectedSample(null);
+          }}
+          rows={3}
+          className="w-full max-w-2xl bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
+        />
+        {error && <ErrorNote message={error} />}
+      </div>
 
-          {nearest && (
-            <div className="text-sm border border-panel-border rounded px-3 py-3 mt-4 bg-black/20">
-              {isNovel ? (
-                <p className="text-amber-300">
-                  No close precedent -- this lands further from every case than the cases typically
-                  sit from each other. Possibly novel.
-                </p>
-              ) : (
-                <>
-                  <p className="text-muted mb-1">Nearest on the map:</p>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      {nearest.case_id} -- {nearest.case_name}
-                    </span>
-                  </div>
-                  <div className="mt-1">
-                    <FamilyBadge family={nearest.attack_family} />
-                  </div>
-                </>
+      <div className="mt-5 max-h-[55vh] overflow-y-auto">
+        <div className="grid md:grid-cols-2 gap-6 items-start">
+          <div className="border border-panel-border rounded-md bg-black/20 p-2">
+            <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
+              {/* Spoke lines: each real alert back to its own case's centroid, in that
+                  case's family color at low opacity -- a texture showing how tightly a
+                  case's own alerts actually cluster around it. */}
+              {ALERTS.filter((a) => a.ground_truth !== "noise").map((a) => {
+                const c = caseById.get(a.ground_truth);
+                if (!c) return null;
+                const [ax, ay] = scale(a.x, a.y);
+                const [cx, cy] = scale(c.x, c.y);
+                const isAi = c.attack_family === "ai_attack";
+                return (
+                  <line
+                    key={`spoke-${a.id}`}
+                    x1={ax}
+                    y1={ay}
+                    x2={cx}
+                    y2={cy}
+                    className={isAi ? "stroke-accent-ai" : "stroke-accent"}
+                    strokeWidth={0.5}
+                    opacity={0.25}
+                  />
+                );
+              })}
+
+              {/* Every alert as a small dot -- noise muted gray with no home to point
+                  to, real alerts colored by their case's family. */}
+              {ALERTS.map((a) => {
+                const [ax, ay] = scale(a.x, a.y);
+                const isNoise = a.ground_truth === "noise";
+                const isAi = a.attack_family === "ai_attack";
+                return (
+                  <circle
+                    key={a.id}
+                    cx={ax}
+                    cy={ay}
+                    r={isNoise ? 1.3 : 1.8}
+                    className={isNoise ? "fill-muted" : isAi ? "fill-accent-ai" : "fill-accent"}
+                    opacity={isNoise ? 0.35 : 0.8}
+                  >
+                    <title>{isNoise ? `Noise: ${a.title}` : `${a.ground_truth}: ${a.title}`}</title>
+                  </circle>
+                );
+              })}
+
+              {/* The 7 case centroids, on top of everything else. */}
+              {CASES.map((c) => {
+                const [cx, cy] = scale(c.x, c.y);
+                const isAi = c.attack_family === "ai_attack";
+                return (
+                  <g key={c.case_id}>
+                    <circle cx={cx} cy={cy} r={5} className={isAi ? "fill-accent-ai" : "fill-accent"} stroke="#0a0e14" strokeWidth={1.2} />
+                    <title>{`${c.case_id} -- ${c.case_name}`}</title>
+                    <text x={cx} y={cy - 8} textAnchor="middle" className="fill-muted text-[7px] font-mono-ui">
+                      {c.case_id}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {point && (
+                <g>
+                  <circle
+                    cx={scale(point[0], point[1])[0]}
+                    cy={scale(point[0], point[1])[1]}
+                    r={6}
+                    className="fill-background stroke-2"
+                    stroke={isNovel ? "#f59e0b" : "#ffffff"}
+                  />
+                  <circle
+                    cx={scale(point[0], point[1])[0]}
+                    cy={scale(point[0], point[1])[1]}
+                    r={2}
+                    fill={isNovel ? "#f59e0b" : "#ffffff"}
+                  />
+                </g>
+              )}
+
+              {/* Axis labels: honest about having no inherent meaning (see info button). */}
+              <text x={WIDTH - 4} y={HEIGHT - 4} textAnchor="end" className="fill-muted text-[7px] font-mono-ui">
+                PC1 &rarr;
+              </text>
+              <text x={4} y={10} textAnchor="start" className="fill-muted text-[7px] font-mono-ui">
+                PC2 &uarr;
+              </text>
+            </svg>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pb-1 text-xs text-muted">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Classic
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-accent-ai inline-block" /> AI-native
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted inline-block opacity-60" /> Noise
+              </span>
+              {point && (
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-white inline-block" /> Your snippet
+                </span>
               )}
             </div>
-          )}
+          </div>
+
+          <div>
+            {nearest && (
+              <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20">
+                {isNovel ? (
+                  <p className="text-amber-300">
+                    No close precedent -- this lands further from every case than the cases typically
+                    sit from each other. Possibly novel.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-muted mb-1">Nearest on the map:</p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {nearest.case_id} -- {nearest.case_name}
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      <FamilyBadge family={nearest.attack_family} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Panel>

@@ -1,12 +1,12 @@
 import type { PoolItem } from "@/lib/securebertApi";
-import { FrameworkBadges } from "./ui";
-import { formatDateTime, sortByMinutesAgoDesc } from "@/lib/resolveTime";
+import { FrameworkBadges, LinkedText } from "./ui";
+import { formatDateTime, sortByMinutesAgo, isHistoric } from "@/lib/resolveTime";
 
 // Sorted directly off each alert's own minutes_ago field, not Groq's narrated
 // order -- an objective, data-derived sequence to sit next to the LLM's prose
 // interpretation of the same alerts.
 export default function Timeline({ items, nowMs }: { items: PoolItem[]; nowMs: number | null }) {
-  const sorted = sortByMinutesAgoDesc(items);
+  const sorted = sortByMinutesAgo(items, "asc");
 
   return (
     <div className="space-y-0">
@@ -18,8 +18,19 @@ export default function Timeline({ items, nowMs }: { items: PoolItem[]; nowMs: n
           </div>
           <div className="pb-4 min-w-0">
             <div className="text-xs font-mono-ui text-muted">{formatDateTime(a.minutes_ago, nowMs)}</div>
-            <div className="text-sm font-medium">{a.title}</div>
-            {a.why_it_matters && <p className="text-xs text-muted mt-0.5">{a.why_it_matters}</p>}
+            <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+              {a.title}
+              {isHistoric(a.minutes_ago) && (
+                <span className="text-[10px] font-mono-ui px-1.5 py-0.5 rounded border border-amber-400/40 text-amber-300 bg-amber-400/10">
+                  Historic finding
+                </span>
+              )}
+            </div>
+            {a.why_it_matters && (
+              <p className="text-xs text-muted mt-0.5">
+                <LinkedText text={a.why_it_matters} />
+              </p>
+            )}
             <FrameworkBadges
               attack={a.mitre_techniques.map((t) => ({ technique_id: t }))}
               atlas={a.mitre_atlas_techniques.map((t) => ({ technique_id: t }))}

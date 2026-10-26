@@ -33,15 +33,50 @@ export function FamilyBadge({ family }: { family: string }) {
 
 // https://attack.mitre.org/techniques/T1566/ (base) or /T1048/003/ (sub-technique:
 // dotted suffix becomes its own path segment, per MITRE's own URL convention).
-function attackUrl(id: string): string {
+export function attackUrl(id: string): string {
   const [base, sub] = id.split(".");
   return sub ? `https://attack.mitre.org/techniques/${base}/${sub}/` : `https://attack.mitre.org/techniques/${base}/`;
 }
 
 // https://atlas.mitre.org/techniques/AML.T0086 -- ATLAS keeps the full dotted ID,
 // sub-techniques included, as a single path segment (no splitting).
-function atlasUrl(id: string): string {
+export function atlasUrl(id: string): string {
   return `https://atlas.mitre.org/techniques/${id}`;
+}
+
+// Matches a bare technique ID wherever it appears in running prose -- ATLAS IDs
+// first (more specific: "AML.T####" with an optional ".###" sub-technique), then
+// plain ATT&CK IDs ("T####" with an optional ".###"). Used to auto-link technique
+// mentions inside Groq's narrative text, not just the dedicated badge rows.
+const TECHNIQUE_ID_PATTERN = /\bAML\.T\d{4}(?:\.\d{3})?\b|\bT\d{4}(?:\.\d{3})?\b/g;
+
+// Renders prose with any technique ID it contains turned into a MITRE link,
+// instead of only linking IDs that already have their own dedicated badge row.
+export function LinkedText({ text }: { text: string }) {
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  const regex = new RegExp(TECHNIQUE_ID_PATTERN);
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text))) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    const id = match[0];
+    const isAtlas = id.startsWith("AML.");
+    nodes.push(
+      <a
+        key={key++}
+        href={isAtlas ? atlasUrl(id) : attackUrl(id)}
+        target="_blank"
+        rel="noreferrer"
+        className={`font-mono-ui hover:underline ${isAtlas ? "text-accent-ai" : "text-accent"}`}
+      >
+        {id}
+      </a>
+    );
+    lastIndex = match.index + id.length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return <>{nodes}</>;
 }
 
 export function FrameworkBadges({
@@ -127,7 +162,9 @@ export function Narrative({ text }: { text: string }) {
   return (
     <div className="rounded border border-panel-border bg-black/20 p-4 text-sm leading-relaxed space-y-3">
       {(paragraphs.length > 0 ? paragraphs : [text]).map((p, i) => (
-        <p key={i}>{p}</p>
+        <p key={i}>
+          <LinkedText text={p} />
+        </p>
       ))}
     </div>
   );
@@ -139,12 +176,12 @@ export function Narrative({ text }: { text: string }) {
 export function InfoButton({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <span className="relative inline-block align-middle ml-1">
+    <span className="relative inline-flex align-text-top ml-1.5 -translate-y-0.5">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={label}
-        className="inline-flex items-center justify-center h-4 w-4 rounded-full border border-muted text-muted text-[10px] font-mono-ui hover:border-accent hover:text-accent cursor-pointer"
+        className="inline-flex items-center justify-center h-[18px] w-[18px] rounded-full border border-muted text-muted text-xs leading-none font-mono-ui hover:border-accent hover:text-accent cursor-pointer"
       >
         i
       </button>
@@ -197,6 +234,19 @@ export function PrimaryButton(
         </div>
       )}
     </div>
+  );
+}
+
+export function ClearButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const { className, ...rest } = props;
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={`px-4 py-2 rounded-md text-sm font-medium border border-panel-border text-muted hover:text-foreground hover:border-foreground/30 cursor-pointer transition ${className ?? ""}`}
+    >
+      Clear
+    </button>
   );
 }
 

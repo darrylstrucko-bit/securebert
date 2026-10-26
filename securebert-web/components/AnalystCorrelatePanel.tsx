@@ -127,46 +127,45 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       </div>
 
       {selected && (
-        <div className="flex items-center gap-3 mb-3 flex-wrap">
-          <span className="text-sm font-medium">{selected.case_name}</span>
-          <FamilyBadge family={selected.attack_family} />
-          {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
-          {highlighted && <ConfidenceBadge confidence={confidence} />}
+        <div className="mb-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium">{selected.case_name}</span>
+            <FamilyBadge family={selected.attack_family} />
+            {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
+            {highlighted && <ConfidenceBadge confidence={confidence} />}
+            {highlighted && (
+              <button
+                onClick={() => setRevealed((r) => !r)}
+                className="text-sm text-accent underline cursor-pointer ml-auto"
+              >
+                {revealed ? "Hide ground truth" : "Reveal ground truth"}
+              </button>
+            )}
+          </div>
+          {revealed && (
+            <div className="text-sm border border-panel-border rounded px-4 py-3 bg-black/20 mt-3 ml-auto max-w-sm text-right">
+              <div>
+                Correctly grouped: {pool?.ground_truth_reveal.correctly_grouped} /{" "}
+                {pool?.ground_truth_reveal.real_alerts_in_case} real alerts
+              </div>
+              <div>Missed (amber rows): {pool?.ground_truth_reveal.missed}</div>
+              <div>Noise that leaked in (red rows): {pool?.ground_truth_reveal.noise_fragments_in_detected_cluster}</div>
+              <div>Noise correctly excluded: {pool?.ground_truth_reveal.noise_fragments_correctly_excluded}</div>
+            </div>
+          )}
         </div>
       )}
 
       {pool && (
         <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted">
-                {pool.pool_size} unlabeled alerts ({pool.real_alert_count} real, {pool.noise_count} noise)
-              </span>
+            <div className="flex items-center justify-end mb-2">
               <PrimaryButton onClick={run} loading={running} modelWarm={modelWarm}>
                 Run correlation
               </PrimaryButton>
             </div>
             <AlertTable pool={pool.pool} caseId={caseId} highlighted={highlighted} revealed={revealed} nowMs={nowMs} />
             {runError && <ErrorNote message={runError} />}
-            {highlighted && (
-              <button
-                onClick={() => setRevealed((r) => !r)}
-                className="text-sm text-accent underline cursor-pointer mt-3"
-              >
-                {revealed ? "Hide ground truth" : "Reveal ground truth"}
-              </button>
-            )}
-            {revealed && (
-              <div className="text-sm border border-panel-border rounded px-4 py-3 bg-black/20 mt-3">
-                <div>
-                  Correctly grouped: {pool.ground_truth_reveal.correctly_grouped} /{" "}
-                  {pool.ground_truth_reveal.real_alerts_in_case} real alerts
-                </div>
-                <div>Missed (amber rows): {pool.ground_truth_reveal.missed}</div>
-                <div>Noise that leaked in (red rows): {pool.ground_truth_reveal.noise_fragments_in_detected_cluster}</div>
-                <div>Noise correctly excluded: {pool.ground_truth_reveal.noise_fragments_correctly_excluded}</div>
-              </div>
-            )}
           </div>
 
           <div>
