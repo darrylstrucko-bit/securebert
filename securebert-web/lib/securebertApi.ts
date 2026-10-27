@@ -75,9 +75,26 @@ export async function clusterCase(caseId: string, noiseCount = 80, seed?: number
   return res.json();
 }
 
-// [x, y] in the same fixed 2D space lib/data/static-pool.json's corpusMap was
-// precomputed in (see securebert-api/app/corpus.py's project()).
-export async function projectText(text: string): Promise<[number, number]> {
+export type NearestCase = {
+  case_id: string;
+  case_name: string;
+  attack_family: "classic" | "ai_attack";
+  similarity: number;
+  is_novel: boolean;
+};
+
+export type ProjectResult = {
+  // [x, y] in the same fixed 2D space lib/data/static-pool.json's corpusMap
+  // was precomputed in (see securebert-api/app/corpus.py's project()) --
+  // display only, never used to determine the nearest case.
+  coords: [number, number];
+  // The actual semantic claim: cosine similarity against the real,
+  // full-dimensional case embeddings (see corpus.py's retrieve()), not
+  // distance on the lossy 2D projection above.
+  nearest: NearestCase;
+};
+
+export async function projectText(text: string): Promise<ProjectResult> {
   const res = await fetch(`${requireBaseUrl()}/project`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -85,6 +102,5 @@ export async function projectText(text: string): Promise<[number, number]> {
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) throw new Error(`securebert-api /project returned ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.coords as [number, number];
+  return res.json();
 }

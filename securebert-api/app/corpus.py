@@ -57,6 +57,45 @@ def cosine_sim(a, b) -> float:
     return float(np.dot(a, b) / denom)
 
 
+_novelty_sim_floor = None
+
+
+# Raw cosine similarity between mean-pooled SecureBERT embeddings has no fixed
+# "good" absolute value -- any two pieces of security-flavored English text
+# tend to score 0.8-1.0 regardless of whether they're actually related (a
+# random, unrelated vector scores ~0.04, but that's the only clearly obvious
+# case). So the novelty floor isn't a guessed constant: it's calibrated
+# against the alert pool's own ground truth, which already tells us which
+# alerts truly belong to a case and which are noise deliberately unrelated to
+# all 7. For every alert, take its top-case similarity, then pick the
+# threshold that best separates the "belongs to a case" scores from the
+# "noise" scores (Youden's J statistic: maximizes true-positive rate minus
+# false-positive rate). Measured here: ~0.93, correctly keeping ~88% of real
+# alerts above it while incorrectly admitting only ~3% of noise.
+def _novelty_floor() -> float:
+    global _novelty_sim_floor
+    if _novelty_sim_floor is None:
+        _, alert_pool = _load()
+        real_sims, noise_sims = [], []
+        for a in alert_pool:
+            top_sim = retrieve(a["vector"], k=1)[0]["similarity"]
+            (noise_sims if a["ground_truth"] == "noise" else real_sims).append(top_sim)
+
+        best_t, best_j = 0.0, -1.0
+        for t in sorted(set(real_sims) | set(noise_sims)):
+            tpr = sum(1 for s in real_sims if s >= t) / len(real_sims)
+            fpr = sum(1 for s in noise_sims if s >= t) / len(noise_sims)
+            j = tpr - fpr
+            if j > best_j:
+                best_j, best_t = j, t
+        _novelty_sim_floor = best_t
+    return _novelty_sim_floor
+
+
+def is_novel(similarity: float) -> bool:
+    return similarity < _novelty_floor()
+
+
 def list_cases():
     case_corpus, _ = _load()
     return [

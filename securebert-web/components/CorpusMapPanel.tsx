@@ -5,6 +5,7 @@ import { ChartScatter } from "lucide-react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
 import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
+import type { NearestCase, ProjectResult } from "@/lib/securebertApi";
 import staticData from "@/lib/data/static-pool.json";
 
 type CaseMapPoint = { case_id: string; case_name: string; attack_family: string; x: number; y: number };
@@ -49,10 +50,6 @@ function buildScale() {
   ];
 }
 
-function dist(ax: number, ay: number, bx: number, by: number) {
-  return Math.hypot(ax - bx, ay - by);
-}
-
 const caseById = new Map(CASES.map((c) => [c.case_id, c]));
 
 // Matches the ring-and-dot marker drawn on the map (white, or amber when the
@@ -70,22 +67,18 @@ function PlottedSnippetMarker({ novel }: { novel: boolean }) {
   );
 }
 
-// A snippet's nearest case counts as "close" if it's no further than the cases'
-// own typical nearest-neighbor spacing -- a simple, visible-on-the-plot
-// definition of "resembles something we've seen," not a precision claim.
-const NOVELTY_THRESHOLD = (() => {
-  const nearest = CASES.map((c) =>
-    Math.min(...CASES.filter((o) => o.case_id !== c.case_id).map((o) => dist(c.x, c.y, o.x, o.y)))
-  );
-  return Math.max(...nearest) * 1.3;
-})();
-
 export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
   const [text, setText] = useState(SAMPLES[0].text);
   const [selectedSample, setSelectedSample] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [point, setPoint] = useState<[number, number] | null>(null);
+  // The actual semantic match, by cosine similarity against the real SecureBERT
+  // embeddings (securebert-api's corpus.retrieve) -- NOT derived from where the
+  // dot lands on the 2D plot below. PCA keeps only the two directions of
+  // greatest spread across the whole corpus, so the visually closest centroid
+  // on the map is not guaranteed to be this case.
+  const [nearest, setNearest] = useState<NearestCase | null>(null);
 
   const scale = useMemo(() => buildScale(), []);
 
@@ -94,13 +87,15 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
     setLoading(true);
     setError(null);
     setPoint(null);
+    setNearest(null);
     try {
-      const data = await fetchJson<{ coords: [number, number] }>("/api/project", {
+      const data = await fetchJson<ProjectResult>("/api/project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
       setPoint(data.coords);
+      setNearest(data.nearest);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -108,12 +103,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
     }
   }
 
-  const nearest = point
-    ? [...CASES]
-        .map((c) => ({ ...c, d: dist(point[0], point[1], c.x, c.y) }))
-        .sort((a, b) => a.d - b.d)[0]
-    : null;
-  const isNovel = nearest ? nearest.d > NOVELTY_THRESHOLD : false;
+  const isNovel = nearest?.is_novel ?? false;
 
   return (
     <Panel
@@ -129,7 +119,10 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             the two directions where that data spreads out the most, and plots everything using just
             those two -- compressing hundreds of dimensions down to the flat chart below. The axes
             (PC1, PC2) have no built-in meaning like &ldquo;risk&rdquo; -- they&rsquo;re just whichever
-            directions happened to capture the most spread in this data.
+            directions happened to capture the most spread in this data. The dots&rsquo; positions are
+            for browsing the corpus by eye only -- the nearest-match result below is computed
+            separately, by cosine similarity on the real, un-squashed embeddings, so it can
+            occasionally point to a case that isn&rsquo;t the visually closest dot.
           </InfoButton>
           . Related events appear closer together, helping reveal common patterns, clusters, and
           outliers.
@@ -260,15 +253,18 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
               <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20">
                 {isNovel ? (
                   <p className="text-amber-300">
-                    No close precedent -- this lands further from every case than the cases typically
-                    sit from each other. Possibly novel.
+                    No close match -- less similar to its best-matching case than real cases
+                    typically are to each other. Possibly novel.
                   </p>
                 ) : (
                   <>
-                    <p className="text-muted mb-1">Nearest on the map:</p>
+                    <p className="text-muted mb-1">Nearest match (by semantic similarity):</p>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
                         {nearest.case_id} -- {nearest.case_name}
+                      </span>
+                      <span className="font-mono-ui text-xs text-muted ml-auto">
+                        similarity {nearest.similarity.toFixed(3)}
                       </span>
                     </div>
                     <div className="mt-1">
@@ -290,19 +286,23 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
                 </div>
                 {isNovel ? (
                   <p className="text-amber-300">
-                    SecureBERT 2.0 embedded your text and PCA placed it here -- further from every
-                    case than the cases typically sit from each other, so nothing on this map reads
-                    as a close match.
+                    SecureBERT 2.0 embedded your text and compared it against all 7 cases&rsquo; real
+                    embeddings -- its best match (similarity {nearest.similarity.toFixed(3)}) still
+                    reads less similar than real cases typically are to each other, so nothing here
+                    is a close match. The dot above is plotted with PCA purely to show roughly where
+                    it falls on the map -- that 2D position isn&rsquo;t what drove this result.
                   </p>
                 ) : (
                   <p className="text-muted">
-                    SecureBERT 2.0 embedded your text and PCA placed it at these coordinates --
-                    nearest to{" "}
+                    SecureBERT 2.0 embedded your text and compared it, by cosine similarity, against
+                    all 7 cases&rsquo; real embeddings -- not the 2D positions on the map. The closest
+                    match is{" "}
                     <span className="text-foreground font-medium">
                       {nearest.case_id} -- {nearest.case_name}
-                    </span>
-                    , closer than to any other case here. That means its embedding reads as more
-                    similar to {nearest.case_id} than to anything else on this map.
+                    </span>{" "}
+                    (similarity {nearest.similarity.toFixed(3)}). The dot above is plotted with PCA
+                    purely to show roughly where it falls on the map, so it can occasionally sit
+                    closer to a different dot than the actual nearest match.
                   </p>
                 )}
               </div>

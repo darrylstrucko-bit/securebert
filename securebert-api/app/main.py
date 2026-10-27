@@ -79,9 +79,14 @@ class ProjectRequest(BaseModel):
     text: str
 
 
-# Corpus Map's only live call: embeds the submitted snippet, then projects it into
-# the same fixed 2D space as the 7 precomputed case positions (see corpus.project).
-# No Groq call -- this is the one use case that's pure SecureBERT.
+# Corpus Map's only live call: embeds the submitted snippet, then both (a)
+# projects it into the fixed 2D space the 7 case positions were plotted in
+# (coords -- display only) and (b) finds its nearest case by cosine similarity
+# against the real, full-dimensional embeddings (nearest -- the actual semantic
+# claim). These two can disagree: PCA keeps only the two directions of
+# greatest spread across the whole corpus, so the visually closest dot on the
+# 2D map is not guaranteed to be the most similar case in the real embedding
+# space. No Groq call -- this is the one use case that's pure SecureBERT.
 @app.post("/project")
 def project(req: ProjectRequest):
     if not req.text.strip():
@@ -89,4 +94,14 @@ def project(req: ProjectRequest):
     if not corpus.ready():
         raise HTTPException(503, "corpus embeddings not built yet -- run scripts/build_embeddings.py")
     vector = model.embed(req.text)
-    return {"coords": corpus.project(vector)}
+    nearest = corpus.retrieve(vector, k=1)[0]
+    return {
+        "coords": corpus.project(vector),
+        "nearest": {
+            "case_id": nearest["case_id"],
+            "case_name": nearest["case_name"],
+            "attack_family": nearest["attack_family"],
+            "similarity": nearest["similarity"],
+            "is_novel": corpus.is_novel(nearest["similarity"]),
+        },
+    }
