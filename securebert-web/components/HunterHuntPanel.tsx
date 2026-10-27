@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Crosshair } from "lucide-react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, LinkedText } from "./ui";
 import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
@@ -73,6 +74,7 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
 
   return (
     <Panel
+      icon={<Crosshair className="h-5 w-5 text-accent" aria-hidden />}
       title="Hypothesis -> Hunt Plan"
       subtitle="Enter a plain-English hunting hypothesis, traditional or AI-native. SecureBERT 2.0 finds relevant precedents, then Groq uses them to generate a concrete hunt plan."
     >

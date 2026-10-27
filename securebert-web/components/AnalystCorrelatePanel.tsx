@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { GitMerge } from "lucide-react";
 import { Panel, FamilyBadge, RiskBadge, ConfidenceBadge, Narrative, PrimaryButton, ErrorNote } from "./ui";
 import AlertTable from "./AlertTable";
 import Timeline from "./Timeline";
@@ -126,6 +127,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
 
   return (
     <Panel
+      icon={<GitMerge className="h-5 w-5 text-accent" aria-hidden />}
       title="Correlate These Alerts"
       subtitle="See how SecureBERT 2.0 identifies related security events within a stream of alerts and background noise. Select a case to reconstruct the attack timeline and reveal the events that matter."
     >

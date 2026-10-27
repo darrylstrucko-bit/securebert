@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChartScatter } from "lucide-react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
 import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
@@ -116,6 +117,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
 
   return (
     <Panel
+      icon={<ChartScatter className="h-5 w-5 text-accent" aria-hidden />}
       title="Corpus Map"
       subtitle={
         <>

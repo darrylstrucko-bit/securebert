@@ -2,10 +2,23 @@
 
 import { useState } from "react";
 
-export function Panel({ title, subtitle, children }: { title: string; subtitle: React.ReactNode; children: React.ReactNode }) {
+export function Panel({
+  icon,
+  title,
+  subtitle,
+  children,
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  subtitle: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-lg border border-panel-border bg-panel/40 p-5">
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="flex items-center gap-2.5">
+        {icon}
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
       <div className="text-sm text-muted mt-1 mb-4">{subtitle}</div>
       {children}
     </section>

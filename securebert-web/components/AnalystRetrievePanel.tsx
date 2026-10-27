@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SearchCheck } from "lucide-react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, Narrative } from "./ui";
 import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
@@ -49,6 +50,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
 
   return (
     <Panel
+      icon={<SearchCheck className="h-5 w-5 text-accent" aria-hidden />}
       title="Is This a Known Pattern?"
       subtitle="Describe a security incident or choose an example to see if SecureBERT 2.0 recognizes similar activity. Explore matching cases, understand their relevance, and get an AI-generated assessment."
     >
