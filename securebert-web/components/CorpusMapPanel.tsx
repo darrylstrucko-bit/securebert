@@ -5,7 +5,7 @@ import { ChartScatter } from "lucide-react";
 import { Panel, PrimaryButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
 import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
-import type { NearestCase, ProjectResult } from "@/lib/securebertApi";
+import type { MatchTier, NearestCase, ProjectResult } from "@/lib/securebertApi";
 import staticData from "@/lib/data/static-pool.json";
 
 type CaseMapPoint = { case_id: string; case_name: string; attack_family: string; x: number; y: number };
@@ -14,18 +14,21 @@ type AlertMapPoint = { id: string; title: string; ground_truth: string; attack_f
 const CASES: CaseMapPoint[] = staticData.corpusMap.cases;
 const ALERTS: AlertMapPoint[] = staticData.corpusMap.alerts;
 
+// Each reliably lands in its labeled tier against the live backend (verified
+// directly, not assumed) -- buttons are named by scenario, not by the result,
+// so the classification is something to discover, not a spoiler.
 const SAMPLES: Sample[] = [
   {
-    label: "Unusual employee login",
-    text: "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS.",
+    label: "Known Attack Pattern",
+    text: "A user uploaded a large encrypted archive to a personal Dropbox account from a finance workstation, after bulk-accessing and copying a large number of files from restricted finance folders.",
   },
   {
-    label: "Fraud portal attack",
-    text: "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold.",
+    label: "Related Activity",
+    text: "A contractor account retrieved several production secrets shortly after being granted an elevated role by an internal automation agent, though it's unclear whether the access itself was properly authorized.",
   },
   {
-    label: "AI data exfiltration",
-    text: "Our new vendor's quarterly report generator just emailed itself a copy of the customer list, which nobody asked it to do.",
+    label: "Unfamiliar Pattern",
+    text: "An attacker manipulated GPS timing signals to disrupt synchronization between industrial control systems.",
   },
 ];
 
@@ -52,11 +55,43 @@ function buildScale() {
 
 const caseById = new Map(CASES.map((c) => [c.case_id, c]));
 
-// Matches the ring-and-dot marker drawn on the map (white, or amber when the
-// plotted point is flagged novel) so the result box visually points back at
-// the same glyph instead of describing it in words alone.
-function PlottedSnippetMarker({ novel }: { novel: boolean }) {
-  const color = novel ? "#f59e0b" : "#ffffff";
+// Likely/possible/no-strong-match get distinct colors (green/amber/gray)
+// instead of a binary match-or-novel -- "no strong match" is a neutral gray,
+// not alarming amber, since it isn't a warning, just an absence of evidence.
+const TIER_META: Record<MatchTier, { label: string; color: string; textClass: string; badgeClass: string }> = {
+  likely_match: {
+    label: "Likely Match",
+    color: "#4ade80",
+    textClass: "text-green-300",
+    badgeClass: "border-green-400/50 text-green-300 bg-green-400/10",
+  },
+  possible_match: {
+    label: "Possible Match",
+    color: "#f59e0b",
+    textClass: "text-amber-300",
+    badgeClass: "border-amber-400/50 text-amber-300 bg-amber-400/10",
+  },
+  no_strong_match: {
+    label: "No Strong Match",
+    color: "#8b98a9",
+    textClass: "text-muted",
+    badgeClass: "border-panel-border text-muted bg-white/5",
+  },
+};
+
+function MatchTierBadge({ tier }: { tier: MatchTier }) {
+  const meta = TIER_META[tier];
+  return (
+    <span className={`inline-block text-xs font-mono-ui px-2 py-0.5 rounded border shrink-0 ${meta.badgeClass}`}>
+      {meta.label}
+    </span>
+  );
+}
+
+// Matches the ring-and-dot marker drawn on the map so the result box visually
+// points back at the same glyph instead of describing it in words alone.
+function PlottedSnippetMarker({ tier }: { tier: MatchTier }) {
+  const color = TIER_META[tier].color;
   return (
     <span
       className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full"
@@ -64,6 +99,45 @@ function PlottedSnippetMarker({ novel }: { novel: boolean }) {
     >
       <span className="h-1 w-1 rounded-full" style={{ backgroundColor: color }} />
     </span>
+  );
+}
+
+function PlottedSnippetExplanation({ nearest }: { nearest: NearestCase }) {
+  const caseRef = (
+    <span className="text-foreground font-medium">
+      {nearest.case_id} -- {nearest.case_name}
+    </span>
+  );
+  const sim = nearest.similarity.toFixed(3);
+
+  if (nearest.match_tier === "likely_match") {
+    return (
+      <p className={TIER_META.likely_match.textClass}>
+        SecureBERT 2.0 compared your text, by cosine similarity, against all 7 cases&rsquo; real
+        embeddings -- not the 2D position on the map. Its closest match is {caseRef} (similarity{" "}
+        {sim}), a similarity level unrelated text essentially never reaches in testing. With only 7
+        categories here, &ldquo;likely&rdquo; is a relative confidence signal from this small dataset,
+        not a validated accuracy guarantee.
+      </p>
+    );
+  }
+  if (nearest.match_tier === "possible_match") {
+    return (
+      <p className={TIER_META.possible_match.textClass}>
+        SecureBERT 2.0&rsquo;s closest match is {caseRef} (similarity {sim}) -- high enough that this
+        probably isn&rsquo;t unrelated text, but not high enough to call it a confident match. In
+        testing, this middle range genuinely contains both real matches and unrelated text, so treat
+        it as worth a look, not a confirmed match.
+      </p>
+    );
+  }
+  return (
+    <p className={TIER_META.no_strong_match.textClass}>
+      SecureBERT 2.0&rsquo;s best match across all 7 cases is {caseRef} (similarity {sim}), but
+      that&rsquo;s no higher than typical unrelated text scores in testing -- it doesn&rsquo;t read as
+      matching any of the 7 known cases. With only 7 narrow categories here, that could also mean
+      this is a genuinely different kind of incident this demo has no example of.
+    </p>
   );
 }
 
@@ -103,8 +177,6 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
     }
   }
 
-  const isNovel = nearest?.is_novel ?? false;
-
   return (
     <Panel
       icon={<ChartScatter className="h-5 w-5 text-accent" aria-hidden />}
@@ -120,7 +192,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             those two -- compressing hundreds of dimensions down to the flat chart below. The axes
             (PC1, PC2) have no built-in meaning like &ldquo;risk&rdquo; -- they&rsquo;re just whichever
             directions happened to capture the most spread in this data. The dots&rsquo; positions are
-            for browsing the corpus by eye only -- the nearest-match result below is computed
+            for browsing the corpus by eye only -- the match classification below is computed
             separately, by cosine similarity on the real, un-squashed embeddings, so it can
             occasionally point to a case that isn&rsquo;t the visually closest dot.
           </InfoButton>
@@ -207,20 +279,20 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
                 );
               })}
 
-              {point && (
+              {point && nearest && (
                 <g>
                   <circle
                     cx={scale(point[0], point[1])[0]}
                     cy={scale(point[0], point[1])[1]}
                     r={6}
                     className="fill-background stroke-2"
-                    stroke={isNovel ? "#f59e0b" : "#ffffff"}
+                    stroke={TIER_META[nearest.match_tier].color}
                   />
                   <circle
                     cx={scale(point[0], point[1])[0]}
                     cy={scale(point[0], point[1])[1]}
                     r={2}
-                    fill={isNovel ? "#f59e0b" : "#ffffff"}
+                    fill={TIER_META[nearest.match_tier].color}
                   />
                 </g>
               )}
@@ -240,9 +312,9 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
               <span className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-muted inline-block opacity-60" /> Noise
               </span>
-              {point && (
+              {point && nearest && (
                 <span className="flex items-center gap-1.5">
-                  <PlottedSnippetMarker novel={isNovel} /> Plotted snippet
+                  <PlottedSnippetMarker tier={nearest.match_tier} /> Plotted snippet
                 </span>
               )}
             </div>
@@ -251,60 +323,34 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
           <div className="space-y-3">
             {nearest && (
               <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20">
-                {isNovel ? (
-                  <p className="text-amber-300">
-                    No close match -- less similar to its best-matching case than real cases
-                    typically are to each other. Possibly novel.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-muted mb-1">Nearest match (by semantic similarity):</p>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {nearest.case_id} -- {nearest.case_name}
-                      </span>
-                      <span className="font-mono-ui text-xs text-muted ml-auto">
-                        similarity {nearest.similarity.toFixed(3)}
-                      </span>
-                    </div>
-                    <div className="mt-1">
-                      <FamilyBadge family={nearest.attack_family} />
-                    </div>
-                  </>
-                )}
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-muted">Nearest match (by semantic similarity):</span>
+                  <MatchTierBadge tier={nearest.match_tier} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">
+                    {nearest.case_id} -- {nearest.case_name}
+                  </span>
+                  <span className="font-mono-ui text-xs text-muted ml-auto">
+                    similarity {nearest.similarity.toFixed(3)}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  <FamilyBadge family={nearest.attack_family} />
+                </div>
               </div>
             )}
 
             {point && nearest && (
               <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20 space-y-2">
                 <div className="flex items-center gap-2">
-                  <PlottedSnippetMarker novel={isNovel} />
+                  <PlottedSnippetMarker tier={nearest.match_tier} />
                   <span className="font-medium">Plotted snippet</span>
                   <span className="font-mono-ui text-xs text-muted ml-auto">
                     PC1 {point[0].toFixed(2)} &middot; PC2 {point[1].toFixed(2)}
                   </span>
                 </div>
-                {isNovel ? (
-                  <p className="text-amber-300">
-                    SecureBERT 2.0 embedded your text and compared it against all 7 cases&rsquo; real
-                    embeddings -- its best match (similarity {nearest.similarity.toFixed(3)}) still
-                    reads less similar than real cases typically are to each other, so nothing here
-                    is a close match. The dot above is plotted with PCA purely to show roughly where
-                    it falls on the map -- that 2D position isn&rsquo;t what drove this result.
-                  </p>
-                ) : (
-                  <p className="text-muted">
-                    SecureBERT 2.0 embedded your text and compared it, by cosine similarity, against
-                    all 7 cases&rsquo; real embeddings -- not the 2D positions on the map. The closest
-                    match is{" "}
-                    <span className="text-foreground font-medium">
-                      {nearest.case_id} -- {nearest.case_name}
-                    </span>{" "}
-                    (similarity {nearest.similarity.toFixed(3)}). The dot above is plotted with PCA
-                    purely to show roughly where it falls on the map, so it can occasionally sit
-                    closer to a different dot than the actual nearest match.
-                  </p>
-                )}
+                <PlottedSnippetExplanation nearest={nearest} />
               </div>
             )}
           </div>

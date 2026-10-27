@@ -57,43 +57,133 @@ def cosine_sim(a, b) -> float:
     return float(np.dot(a, b) / denom)
 
 
-_novelty_sim_floor = None
+_calibration = None
 
 
-# Raw cosine similarity between mean-pooled SecureBERT embeddings has no fixed
-# "good" absolute value -- any two pieces of security-flavored English text
-# tend to score 0.8-1.0 regardless of whether they're actually related (a
-# random, unrelated vector scores ~0.04, but that's the only clearly obvious
-# case). So the novelty floor isn't a guessed constant: it's calibrated
-# against the alert pool's own ground truth, which already tells us which
-# alerts truly belong to a case and which are noise deliberately unrelated to
-# all 7. For every alert, take its top-case similarity, then pick the
-# threshold that best separates the "belongs to a case" scores from the
-# "noise" scores (Youden's J statistic: maximizes true-positive rate minus
-# false-positive rate). Measured here: ~0.93, correctly keeping ~88% of real
-# alerts above it while incorrectly admitting only ~3% of noise.
-def _novelty_floor() -> float:
-    global _novelty_sim_floor
-    if _novelty_sim_floor is None:
-        _, alert_pool = _load()
-        real_sims, noise_sims = [], []
-        for a in alert_pool:
-            top_sim = retrieve(a["vector"], k=1)[0]["similarity"]
-            (noise_sims if a["ground_truth"] == "noise" else real_sims).append(top_sim)
-
-        best_t, best_j = 0.0, -1.0
-        for t in sorted(set(real_sims) | set(noise_sims)):
-            tpr = sum(1 for s in real_sims if s >= t) / len(real_sims)
-            fpr = sum(1 for s in noise_sims if s >= t) / len(noise_sims)
-            j = tpr - fpr
-            if j > best_j:
-                best_j, best_t = j, t
-        _novelty_sim_floor = best_t
-    return _novelty_sim_floor
+def _loo_case_centroid(by_case: dict, case_id: str, exclude_alert_id: str):
+    siblings = [
+        np.asarray(a["vector"], dtype=np.float32)
+        for a in by_case[case_id]
+        if a["id"] != exclude_alert_id
+    ]
+    return np.mean(siblings, axis=0)
 
 
-def is_novel(similarity: float) -> bool:
-    return similarity < _novelty_floor()
+# Calibrates Corpus Map's match classification against the alert pool's own
+# ground truth. Three things this corrects versus a naive version:
+#
+# 1. LEAKAGE: each case's stored vector is the MEAN of that case's own real
+#    alert vectors (see build_embeddings.py). Scoring a real alert against its
+#    own case's full centroid therefore partly measures the alert's cosine
+#    similarity to itself (~1/7 of the average). So real alerts are scored
+#    here against a leave-one-out centroid (same case, that one alert
+#    excluded) -- the honest version of "how similar is this to its case."
+#    This does NOT apply to live user queries (see retrieve()): a genuinely
+#    new query was never averaged into any centroid, so comparing it against
+#    the full centroid is correct and unaffected by this issue.
+#
+# 2. THRESHOLD OBJECTIVE: the low cutoff is chosen to maximize true-positive
+#    rate subject to a 5% cap on false-positive rate, not a balanced
+#    (Youden's J) tradeoff -- a confidently wrong match is worse for an
+#    analyst than an over-cautious "no strong match", so the threshold
+#    deliberately trades recall for precision.
+#
+# 3. UNFAMILIAR CATEGORIES: noise alerts (used as the "should not match"
+#    class above) were purpose-built as excludable decoys for the Correlate
+#    use case, not as a stand-in for "a real but different attack category."
+#    So a second check, leave-one-case-out (hold out one of the 7 cases
+#    entirely, score its own alerts against the other 6), simulates that
+#    directly. The high cutoff ("Likely Match") additionally requires that
+#    held-out-category alerts rarely cross it -- not just that noise doesn't.
+#
+# Measured on this dataset (see docs/corpus-map-calibration.md for the full
+# report): t_low ~0.93 (61% of real alerts correctly at/above it, 5% of noise
+# incorrectly above it); t_high ~0.945 (0% of noise, ~4% of held-out-category
+# alerts reach it). Honest case-ID accuracy (is the top-1 case even the
+# RIGHT one) is only ~69% -- stated plainly in the UI, not just here, because
+# with only 7 categories and ~7 examples each this is a rough, small-sample
+# estimate, not a validated accuracy figure.
+def _calibrate() -> dict:
+    global _calibration
+    if _calibration is not None:
+        return _calibration
+
+    case_corpus, alert_pool = _load()
+    full_centroids = {c["case_id"]: np.asarray(c["vector"], dtype=np.float32) for c in case_corpus}
+    case_ids = list(full_centroids.keys())
+
+    real = [a for a in alert_pool if a["ground_truth"] != "noise"]
+    noise = [a for a in alert_pool if a["ground_truth"] == "noise"]
+    by_case: dict = {}
+    for a in real:
+        by_case.setdefault(a["ground_truth"], []).append(a)
+
+    real_sim, correct = [], 0
+    for a in real:
+        cid = a["ground_truth"]
+        vec = np.asarray(a["vector"], dtype=np.float32)
+        sims = {cid: cosine_sim(vec, _loo_case_centroid(by_case, cid, a["id"]))}
+        sims.update({o: cosine_sim(vec, full_centroids[o]) for o in case_ids if o != cid})
+        top_case = max(sims, key=sims.get)
+        real_sim.append(sims[top_case])
+        correct += top_case == cid
+
+    noise_sim = [
+        max(cosine_sim(np.asarray(a["vector"], dtype=np.float32), full_centroids[c]) for c in case_ids)
+        for a in noise
+    ]
+
+    loco_sim = []
+    for held_out in case_ids:
+        remaining = [c for c in case_ids if c != held_out]
+        for a in by_case[held_out]:
+            vec = np.asarray(a["vector"], dtype=np.float32)
+            loco_sim.append(max(cosine_sim(vec, full_centroids[c]) for c in remaining))
+
+    t_low, best_tpr = 1.0, -1.0
+    for t in sorted(set(real_sim) | set(noise_sim)):
+        fpr = sum(1 for s in noise_sim if s >= t) / len(noise_sim)
+        if fpr <= 0.05:
+            tpr = sum(1 for s in real_sim if s >= t) / len(real_sim)
+            if tpr > best_tpr:
+                best_tpr, t_low = tpr, t
+
+    candidates = sorted(s for s in (set(real_sim) | set(loco_sim)) if s > t_low)
+    t_high = candidates[-1] if candidates else t_low
+    for t in candidates:
+        noise_fpr = sum(1 for s in noise_sim if s >= t) / len(noise_sim)
+        loco_rate = sum(1 for s in loco_sim if s >= t) / len(loco_sim)
+        if noise_fpr == 0 and loco_rate <= 0.05:
+            t_high = t
+            break
+
+    _calibration = {
+        "t_low": t_low,
+        "t_high": t_high,
+        "real_tpr_at_t_low": sum(1 for s in real_sim if s >= t_low) / len(real_sim),
+        "noise_fpr_at_t_low": sum(1 for s in noise_sim if s >= t_low) / len(noise_sim),
+        "case_id_accuracy": correct / len(real),
+        "n_real": len(real),
+        "n_noise": len(noise),
+        "n_loco": len(loco_sim),
+    }
+    return _calibration
+
+
+# Three tiers, not a binary match/no-match: the evaluation showed a real,
+# data-supported middle zone where both real alerts and noise have meaningful
+# density (neither "clearly noise" nor "clearly a confirmed match"). A hard
+# cutoff through that zone would be arbitrary; a middle "Possible Match" tier
+# names the ambiguity instead of hiding it. "Likely Match" is still NOT a
+# claim that the identified case is correct -- it only means this similarity
+# level is rarely reached by unrelated text (see case_id_accuracy above).
+def classify_match(similarity: float) -> str:
+    c = _calibrate()
+    if similarity < c["t_low"]:
+        return "no_strong_match"
+    if similarity < c["t_high"]:
+        return "possible_match"
+    return "likely_match"
 
 
 def list_cases():

@@ -75,12 +75,14 @@ export async function clusterCase(caseId: string, noiseCount = 80, seed?: number
   return res.json();
 }
 
+export type MatchTier = "likely_match" | "possible_match" | "no_strong_match";
+
 export type NearestCase = {
   case_id: string;
   case_name: string;
   attack_family: "classic" | "ai_attack";
   similarity: number;
-  is_novel: boolean;
+  match_tier: MatchTier;
 };
 
 export type ProjectResult = {

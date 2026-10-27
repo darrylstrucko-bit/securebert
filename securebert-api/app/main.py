@@ -102,6 +102,6 @@ def project(req: ProjectRequest):
             "case_name": nearest["case_name"],
             "attack_family": nearest["attack_family"],
             "similarity": nearest["similarity"],
-            "is_novel": corpus.is_novel(nearest["similarity"]),
+            "match_tier": corpus.classify_match(nearest["similarity"]),
         },
     }
