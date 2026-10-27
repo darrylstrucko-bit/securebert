@@ -102,41 +102,42 @@ function PlottedSnippetMarker({ tier }: { tier: MatchTier }) {
   );
 }
 
-function PlottedSnippetExplanation({ nearest }: { nearest: NearestCase }) {
-  const caseRef = (
-    <span className="text-foreground font-medium">
-      {nearest.case_id} -- {nearest.case_name}
-    </span>
-  );
-  const sim = nearest.similarity.toFixed(3);
+// One short, consistent voice per tier -- the classification decision (here)
+// is the headline; the specific case (shown separately, subordinated, below)
+// is reference material, never restated at length so it can't compete with
+// the decision for attention. mapNote feeds the (separate) Plotted Snippet
+// box, which only needs to place the similarity relative to the thresholds,
+// not re-explain what the tier means.
+const TIER_COPY: Record<MatchTier, { primary: string; supporting: string; mapNote: string }> = {
+  likely_match: {
+    primary: "Strong similarity to a known attack pattern, but not a confirmed identification.",
+    supporting:
+      "This snippet scores above the calibrated threshold where unrelated text essentially never lands, making a genuine connection to this case plausible.",
+    mapNote: "above the threshold for a strong match",
+  },
+  possible_match: {
+    primary: "Some similarity to a known pattern, but insufficient evidence for a strong match.",
+    supporting:
+      "This snippet falls in a middle range where, in testing, both real matches and unrelated text occur -- worth investigating, not confirmed.",
+    mapNote: "between the thresholds for a strong and a weak match",
+  },
+  no_strong_match: {
+    primary: "No sufficiently similar known attack pattern found.",
+    supporting:
+      "This snippet doesn't closely match any of the 7 known cases. It may represent a different type of incident not covered by this demo.",
+    mapNote: "below the threshold for a strong match",
+  },
+};
 
-  if (nearest.match_tier === "likely_match") {
-    return (
-      <p className={TIER_META.likely_match.textClass}>
-        SecureBERT 2.0 compared your text, by cosine similarity, against all 7 cases&rsquo; real
-        embeddings -- not the 2D position on the map. Its closest match is {caseRef} (similarity{" "}
-        {sim}), a similarity level unrelated text essentially never reaches in testing. With only 7
-        categories here, &ldquo;likely&rdquo; is a relative confidence signal from this small dataset,
-        not a validated accuracy guarantee.
-      </p>
-    );
-  }
-  if (nearest.match_tier === "possible_match") {
-    return (
-      <p className={TIER_META.possible_match.textClass}>
-        SecureBERT 2.0&rsquo;s closest match is {caseRef} (similarity {sim}) -- high enough that this
-        probably isn&rsquo;t unrelated text, but not high enough to call it a confident match. In
-        testing, this middle range genuinely contains both real matches and unrelated text, so treat
-        it as worth a look, not a confirmed match.
-      </p>
-    );
-  }
+// Deliberately short: the full case description already lives in the Match
+// Assessment box above, so this only places the similarity value relative to
+// the calibrated thresholds and repeats the PCA-is-cosmetic caveat.
+function PlottedSnippetExplanation({ nearest }: { nearest: NearestCase }) {
   return (
-    <p className={TIER_META.no_strong_match.textClass}>
-      SecureBERT 2.0&rsquo;s best match across all 7 cases is {caseRef} (similarity {sim}), but
-      that&rsquo;s no higher than typical unrelated text scores in testing -- it doesn&rsquo;t read as
-      matching any of the 7 known cases. With only 7 narrow categories here, that could also mean
-      this is a genuinely different kind of incident this demo has no example of.
+    <p className={TIER_META[nearest.match_tier].textClass}>
+      This snippet&rsquo;s closest known case has a cosine similarity of{" "}
+      {nearest.similarity.toFixed(3)}, {TIER_COPY[nearest.match_tier].mapNote}. Its position on the
+      map shows relative similarity, not a confirmed classification.
     </p>
   );
 }
@@ -323,20 +324,30 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
           <div className="space-y-3">
             {nearest && (
               <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20">
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-muted">Nearest match (by semantic similarity):</span>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="font-medium">Match Assessment</span>
                   <MatchTierBadge tier={nearest.match_tier} />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {nearest.case_id} -- {nearest.case_name}
-                  </span>
-                  <span className="font-mono-ui text-xs text-muted ml-auto">
-                    similarity {nearest.similarity.toFixed(3)}
-                  </span>
-                </div>
-                <div className="mt-1">
-                  <FamilyBadge family={nearest.attack_family} />
+                <p className={`font-medium ${TIER_META[nearest.match_tier].textClass}`}>
+                  {TIER_COPY[nearest.match_tier].primary}
+                </p>
+                <p className="text-muted mt-1">{TIER_COPY[nearest.match_tier].supporting}</p>
+
+                {/* Subordinate to the classification above: smaller, muted, and
+                    separated by a rule, so the nearest case reads as reference
+                    material rather than the headline result -- a nearest
+                    neighbor always exists even when nothing meaningfully matches. */}
+                <div className="mt-3 pt-2 border-t border-panel-border/60">
+                  <p className="text-xs text-muted mb-1">Closest known case (for reference only)</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-muted">
+                      {nearest.case_id} -- {nearest.case_name}
+                    </span>
+                    <FamilyBadge family={nearest.attack_family} />
+                  </div>
+                  <div className="mt-1 font-mono-ui text-xs text-muted">
+                    cosine similarity {nearest.similarity.toFixed(3)}
+                  </div>
                 </div>
               </div>
             )}
