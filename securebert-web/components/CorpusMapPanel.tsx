@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Panel, PrimaryButton, ClearButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, InfoButton } from "./ui";
+import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
 import staticData from "@/lib/data/static-pool.json";
 
@@ -11,10 +12,19 @@ type AlertMapPoint = { id: string; title: string; ground_truth: string; attack_f
 const CASES: CaseMapPoint[] = staticData.corpusMap.cases;
 const ALERTS: AlertMapPoint[] = staticData.corpusMap.alerts;
 
-const SAMPLES = [
-  "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS.",
-  "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold.",
-  "Our new vendor's quarterly report generator just emailed itself a copy of the customer list, which nobody asked it to do.",
+const SAMPLES: Sample[] = [
+  {
+    label: "Unusual employee login",
+    text: "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS.",
+  },
+  {
+    label: "Fraud portal attack",
+    text: "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold.",
+  },
+  {
+    label: "AI data exfiltration",
+    text: "Our new vendor's quarterly report generator just emailed itself a copy of the customer list, which nobody asked it to do.",
+  },
 ];
 
 // 75% of the original 440x300 -- the map was taking more vertical room than it
@@ -55,7 +65,7 @@ const NOVELTY_THRESHOLD = (() => {
 })();
 
 export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
-  const [text, setText] = useState(SAMPLES[0]);
+  const [text, setText] = useState(SAMPLES[0].text);
   const [selectedSample, setSelectedSample] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,13 +92,6 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
     }
   }
 
-  function clear() {
-    setText("");
-    setSelectedSample(null);
-    setPoint(null);
-    setError(null);
-  }
-
   const nearest = point
     ? [...CASES]
         .map((c) => ({ ...c, d: dist(point[0], point[1], c.x, c.y) }))
@@ -109,55 +112,27 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             the two directions where that data spreads out the most, and plots everything using just
             those two -- compressing hundreds of dimensions down to the flat chart below. The axes
             (PC1, PC2) have no built-in meaning like &ldquo;risk&rdquo; -- they&rsquo;re just whichever
-            directions happened to capture the most spread in this data. Empirically here, PC1 roughly
-            separates classic intrusions from AI-native attacks, but that fell out of the data, it
-            wasn&rsquo;t designed in.
+            directions happened to capture the most spread in this data.
           </InfoButton>
           . No Groq call: the only use case that&rsquo;s pure SecureBERT 2.0, nothing narrated on top.
         </>
       }
     >
       <div className="shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
-          <div className="flex flex-wrap gap-1.5">
-            {SAMPLES.map((s, i) => (
-              <button
-                key={s}
-                onClick={() => {
-                  setText(s);
-                  setSelectedSample(i);
-                }}
-                className={`text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
-                  selectedSample === i
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-panel-border text-muted hover:text-foreground"
-                }`}
-              >
-                {s.length > 42 ? s.slice(0, 42) + "..." : s}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="flex gap-2">
-              <ClearButton onClick={clear} />
-              <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
-                Plot this snippet
-              </PrimaryButton>
-            </div>
-            <p className="text-xs text-muted text-right max-w-[220px]">
-              Click &ldquo;Plot this snippet&rdquo; to see where SecureBERT 2.0 places it on the map.
-            </p>
-          </div>
-        </div>
-        <textarea
+        <ExamplePicker
+          label="Choose an example or enter your own snippet"
+          samples={SAMPLES}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setSelectedSample(null);
-          }}
+          onChange={setText}
+          selectedIndex={selectedSample}
+          onSelectIndex={setSelectedSample}
           rows={3}
-          className="w-full max-w-2xl bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
         />
+        <div className="flex justify-end mt-3">
+          <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
+            Plot this snippet
+          </PrimaryButton>
+        </div>
         {error && <ErrorNote message={error} />}
       </div>
 
@@ -165,15 +140,15 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
         <div className="grid md:grid-cols-2 gap-6 items-start">
           <div className="border border-panel-border rounded-md bg-black/20 p-2">
             <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
-              {/* Spoke lines: each real alert back to its own case's centroid, in that
-                  case's family color at low opacity -- a texture showing how tightly a
-                  case's own alerts actually cluster around it. */}
+              {/* Spoke lines: each real alert back to its own case's centroid -- a
+                  texture showing how tightly a case's own alerts actually cluster
+                  around it. One color for every case: this plot isn't trying to say
+                  anything about classic-vs-AI-native, so it doesn't color-code it. */}
               {ALERTS.filter((a) => a.ground_truth !== "noise").map((a) => {
                 const c = caseById.get(a.ground_truth);
                 if (!c) return null;
                 const [ax, ay] = scale(a.x, a.y);
                 const [cx, cy] = scale(c.x, c.y);
-                const isAi = c.attack_family === "ai_attack";
                 return (
                   <line
                     key={`spoke-${a.id}`}
@@ -181,7 +156,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
                     y1={ay}
                     x2={cx}
                     y2={cy}
-                    className={isAi ? "stroke-accent-ai" : "stroke-accent"}
+                    className="stroke-accent"
                     strokeWidth={0.5}
                     opacity={0.25}
                   />
@@ -189,18 +164,17 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
               })}
 
               {/* Every alert as a small dot -- noise muted gray with no home to point
-                  to, real alerts colored by their case's family. */}
+                  to, real alerts a single color tied to their case. */}
               {ALERTS.map((a) => {
                 const [ax, ay] = scale(a.x, a.y);
                 const isNoise = a.ground_truth === "noise";
-                const isAi = a.attack_family === "ai_attack";
                 return (
                   <circle
                     key={a.id}
                     cx={ax}
                     cy={ay}
                     r={isNoise ? 1.3 : 1.8}
-                    className={isNoise ? "fill-muted" : isAi ? "fill-accent-ai" : "fill-accent"}
+                    className={isNoise ? "fill-muted" : "fill-accent"}
                     opacity={isNoise ? 0.35 : 0.8}
                   >
                     <title>{isNoise ? `Noise: ${a.title}` : `${a.ground_truth}: ${a.title}`}</title>
@@ -211,10 +185,9 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
               {/* The 7 case centroids, on top of everything else. */}
               {CASES.map((c) => {
                 const [cx, cy] = scale(c.x, c.y);
-                const isAi = c.attack_family === "ai_attack";
                 return (
                   <g key={c.case_id}>
-                    <circle cx={cx} cy={cy} r={5} className={isAi ? "fill-accent-ai" : "fill-accent"} stroke="#0a0e14" strokeWidth={1.2} />
+                    <circle cx={cx} cy={cy} r={5} className="fill-accent" stroke="#0a0e14" strokeWidth={1.2} />
                     <title>{`${c.case_id} -- ${c.case_name}`}</title>
                     <text x={cx} y={cy - 8} textAnchor="middle" className="fill-muted text-[7px] font-mono-ui">
                       {c.case_id}
@@ -251,10 +224,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             </svg>
             <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pb-1 text-xs text-muted">
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Classic
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-accent-ai inline-block" /> AI-native
+                <span className="h-2 w-2 rounded-full bg-accent inline-block" /> Case alert
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-muted inline-block opacity-60" /> Noise

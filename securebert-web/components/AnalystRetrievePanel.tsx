@@ -1,18 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Panel, PrimaryButton, ClearButton, ErrorNote, FamilyBadge, FrameworkBadges, Narrative } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, Narrative } from "./ui";
+import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
-const SAMPLES = [
-  "A finance ops copilot resolved a routine ticket, but our logs show it also pulled a full customer export and emailed it to a domain we've never corresponded with before. The visible ticket only asked for a password reset.",
-  "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS and spread to other servers over SMB.",
-  "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold, like they're trying to map out and steal the model.",
+const SAMPLES: Sample[] = [
+  {
+    label: "AI data exfiltration",
+    text: "A finance ops copilot resolved a routine ticket, but our logs show it also pulled a full customer export and emailed it to a domain we've never corresponded with before. The visible ticket only asked for a password reset.",
+  },
+  {
+    label: "Unusual employee login",
+    text: "A finance employee logged in from an unusual country, then got added to Domain Admins, and shortly after we saw PowerShell trying to dump credentials from LSASS and spread to other servers over SMB.",
+  },
+  {
+    label: "Fraud portal attack",
+    text: "Someone is hammering our public fraud-scoring API with a huge number of carefully varied requests clustered right around the decision threshold, like they're trying to map out and steal the model.",
+  },
 ];
 
 export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean }) {
-  const [text, setText] = useState(SAMPLES[0]);
+  const [text, setText] = useState(SAMPLES[0].text);
   const [selectedSample, setSelectedSample] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,61 +47,27 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
     }
   }
 
-  function clear() {
-    setText("");
-    setSelectedSample(null);
-    setResult(null);
-    setError(null);
-  }
-
   return (
     <Panel
       title="Is This a Known Pattern?"
       subtitle="Paste a new, unlabeled incident description. SecureBERT 2.0 retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
     >
-      {/* Pinned top: chips, action buttons, textarea -- stays in place while the
-          results below scroll, instead of the whole panel growing without bound. */}
+      {/* Pinned top: picker + action stay in place while results below scroll. */}
       <div className="shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
-          <div className="flex flex-wrap gap-1.5">
-            {SAMPLES.map((s, i) => (
-              <button
-                key={s}
-                onClick={() => {
-                  setText(s);
-                  setSelectedSample(i);
-                }}
-                className={`text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
-                  selectedSample === i
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-panel-border text-muted hover:text-foreground"
-                }`}
-              >
-                {s.length > 42 ? s.slice(0, 42) + "..." : s}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="flex gap-2">
-              <ClearButton onClick={clear} />
-              <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
-                Find precedent
-              </PrimaryButton>
-            </div>
-            <p className="text-xs text-muted text-right max-w-[220px]">
-              Click &ldquo;Find precedent&rdquo; to see the nearest matching case(s) and Groq&rsquo;s brief.
-            </p>
-          </div>
-        </div>
-        <textarea
+        <ExamplePicker
+          label="Choose an example or enter your own incident"
+          samples={SAMPLES}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setSelectedSample(null);
-          }}
+          onChange={setText}
+          selectedIndex={selectedSample}
+          onSelectIndex={setSelectedSample}
           rows={4}
-          className="w-full max-w-2xl bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
         />
+        <div className="flex justify-end mt-3">
+          <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
+            Find precedent
+          </PrimaryButton>
+        </div>
         {error && <ErrorNote message={error} />}
       </div>
 

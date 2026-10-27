@@ -1,14 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Panel, PrimaryButton, ClearButton, ErrorNote, FamilyBadge, FrameworkBadges, LinkedText } from "./ui";
+import { Panel, PrimaryButton, ErrorNote, FamilyBadge, FrameworkBadges, LinkedText } from "./ui";
+import { ExamplePicker, type Sample } from "./ExamplePicker";
 import { fetchJson } from "@/lib/fetchJson";
 import type { RetrieveResult } from "@/lib/securebertApi";
 
-const SAMPLES = [
-  "I think our support copilot might be exfiltrating ticket data through a crafted customer message.",
-  "Office macros might be launching encoded PowerShell on finance workstations.",
-  "Someone may be running systematic queries against our public inference API to clone the model.",
+const SAMPLES: Sample[] = [
+  {
+    label: "AI data exfiltration",
+    text: "I think our support copilot might be exfiltrating ticket data through a crafted customer message.",
+  },
+  {
+    label: "Macro-launched PowerShell",
+    text: "Office macros might be launching encoded PowerShell on finance workstations.",
+  },
+  {
+    label: "Model extraction attempt",
+    text: "Someone may be running systematic queries against our public inference API to clone the model.",
+  },
 ];
 
 type HuntResponse = {
@@ -36,7 +46,7 @@ function ProvenanceRow({ label, children }: { label: string; children: React.Rea
 }
 
 export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
-  const [hypothesis, setHypothesis] = useState(SAMPLES[0]);
+  const [hypothesis, setHypothesis] = useState(SAMPLES[0].text);
   const [selectedSample, setSelectedSample] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,59 +71,26 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
     }
   }
 
-  function clear() {
-    setHypothesis("");
-    setSelectedSample(null);
-    setResult(null);
-    setError(null);
-  }
-
   return (
     <Panel
       title="Hypothesis -> Hunt Plan"
       subtitle="Type a plain-English hunting hypothesis, classic or AI-native. SecureBERT 2.0 grounds it against the nearest precedent before Groq turns it into a concrete hunt plan."
     >
       <div className="shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
-          <div className="flex flex-wrap gap-1.5">
-            {SAMPLES.map((s, i) => (
-              <button
-                key={s}
-                onClick={() => {
-                  setHypothesis(s);
-                  setSelectedSample(i);
-                }}
-                className={`text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
-                  selectedSample === i
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-panel-border text-muted hover:text-foreground"
-                }`}
-              >
-                {s.length > 42 ? s.slice(0, 42) + "..." : s}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="flex gap-2">
-              <ClearButton onClick={clear} />
-              <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
-                Build hunt plan
-              </PrimaryButton>
-            </div>
-            <p className="text-xs text-muted text-right max-w-[220px]">
-              Click &ldquo;Build hunt plan&rdquo; to ground your hypothesis and get a concrete plan.
-            </p>
-          </div>
-        </div>
-        <textarea
+        <ExamplePicker
+          label="Choose an example or enter your own hypothesis"
+          samples={SAMPLES}
           value={hypothesis}
-          onChange={(e) => {
-            setHypothesis(e.target.value);
-            setSelectedSample(null);
-          }}
+          onChange={setHypothesis}
+          selectedIndex={selectedSample}
+          onSelectIndex={setSelectedSample}
           rows={3}
-          className="w-full max-w-2xl bg-black/30 border border-panel-border rounded px-3 py-2 text-sm"
         />
+        <div className="flex justify-end mt-3">
+          <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
+            Build hunt plan
+          </PrimaryButton>
+        </div>
         {error && <ErrorNote message={error} />}
       </div>
 

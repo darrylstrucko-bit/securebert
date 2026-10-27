@@ -39,6 +39,25 @@ function staticPoolFor(caseId: string): ClusterResult {
   };
 }
 
+// Ground-truth stat: a big value with a muted caption underneath, colored by
+// how "good" that number is (fewer misses/false positives is better).
+function Stat({ value, label, tone }: { value: React.ReactNode; label: string; tone: "good" | "warn" | "bad" | "neutral" }) {
+  const color =
+    tone === "good"
+      ? "text-emerald-400"
+      : tone === "warn"
+        ? "text-amber-400"
+        : tone === "bad"
+          ? "text-red-400"
+          : "text-foreground";
+  return (
+    <div className="text-center">
+      <div className={`text-base font-semibold font-mono-ui ${color}`}>{value}</div>
+      <div className="text-[11px] text-muted whitespace-nowrap">{label}</div>
+    </div>
+  );
+}
+
 export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolean }) {
   const [caseId, setCaseId] = useState<string>(CASES[0]?.case_id ?? "");
   const [pool, setPool] = useState<ClusterResult | null>(() => (caseId ? staticPoolFor(caseId) : null));
@@ -92,6 +111,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       setRiskScore(data.riskScore);
       setConfidence(data.confidence);
       setHighlighted(true);
+      setRevealed(true); // ground truth shown by default right after a run
       setRightTab("timeline");
     } catch (err) {
       setRunError(err instanceof Error ? err.message : String(err));
@@ -102,6 +122,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
 
   const selected = useMemo(() => CASES.find((c) => c.case_id === caseId), [caseId]);
   const detected = pool?.pool.filter((a) => a.in_detected_cluster) ?? [];
+  const gt = pool?.ground_truth_reveal;
 
   return (
     <Panel
@@ -127,30 +148,48 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       </div>
 
       {selected && (
-        <div className="mb-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium">{selected.case_name}</span>
-            <FamilyBadge family={selected.attack_family} />
-            {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
-            {highlighted && <ConfidenceBadge confidence={confidence} />}
-            {highlighted && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-medium">{selected.case_name}</span>
+              <FamilyBadge family={selected.attack_family} />
+              {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
+              {highlighted && <ConfidenceBadge confidence={confidence} />}
+            </div>
+            <PrimaryButton onClick={run} loading={running} modelWarm={modelWarm}>
+              {highlighted ? "Rerun correlation" : "Run correlation"}
+            </PrimaryButton>
+          </div>
+
+          {highlighted && gt && (
+            <div className="mt-3 flex items-center justify-between gap-4 flex-wrap rounded border border-panel-border bg-black/20 px-4 py-2.5">
+              {revealed ? (
+                <>
+                  <span className="text-xs font-medium text-muted shrink-0">Correlation accuracy</span>
+                  <div className="flex items-center gap-6 flex-wrap">
+                    <Stat
+                      value={`${gt.correctly_grouped} / ${gt.real_alerts_in_case}`}
+                      label="Real alerts found"
+                      tone="good"
+                    />
+                    <Stat value={gt.missed} label="Missed alerts" tone={gt.missed ? "warn" : "neutral"} />
+                    <Stat
+                      value={gt.noise_fragments_in_detected_cluster}
+                      label="False positives"
+                      tone={gt.noise_fragments_in_detected_cluster ? "bad" : "neutral"}
+                    />
+                    <Stat value={gt.noise_fragments_correctly_excluded} label="Noise excluded" tone="neutral" />
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm text-muted">Ground truth hidden.</span>
+              )}
               <button
                 onClick={() => setRevealed((r) => !r)}
-                className="text-sm text-accent underline cursor-pointer ml-auto"
+                className="text-sm text-accent underline cursor-pointer shrink-0"
               >
                 {revealed ? "Hide ground truth" : "Reveal ground truth"}
               </button>
-            )}
-          </div>
-          {revealed && (
-            <div className="text-sm border border-panel-border rounded px-4 py-3 bg-black/20 mt-3 ml-auto max-w-sm text-right">
-              <div>
-                Correctly grouped: {pool?.ground_truth_reveal.correctly_grouped} /{" "}
-                {pool?.ground_truth_reveal.real_alerts_in_case} real alerts
-              </div>
-              <div>Missed (amber rows): {pool?.ground_truth_reveal.missed}</div>
-              <div>Noise that leaked in (red rows): {pool?.ground_truth_reveal.noise_fragments_in_detected_cluster}</div>
-              <div>Noise correctly excluded: {pool?.ground_truth_reveal.noise_fragments_correctly_excluded}</div>
             </div>
           )}
         </div>
@@ -159,23 +198,16 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
       {pool && (
         <div className="grid md:grid-cols-[3fr_2fr] gap-6 items-start">
           <div>
-            <div className="flex items-center justify-end mb-2">
-              <PrimaryButton onClick={run} loading={running} modelWarm={modelWarm}>
-                Run correlation
-              </PrimaryButton>
+            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-panel-border">
+              <h3 className="text-sm font-semibold">Raw alerts</h3>
+              <span className="text-xs font-mono-ui text-muted">{pool.pool.length} events</span>
             </div>
             <AlertTable pool={pool.pool} caseId={caseId} highlighted={highlighted} revealed={revealed} nowMs={nowMs} />
             {runError && <ErrorNote message={runError} />}
           </div>
 
           <div>
-            {!highlighted && (
-              <p className="text-sm text-muted border border-dashed border-panel-border rounded-md p-4">
-                Click &ldquo;Run correlation&rdquo; to see a timeline reconstructed directly from
-                SecureBERT 2.0&rsquo;s detected alerts, plus Groq&rsquo;s narrative read of the same sequence.
-              </p>
-            )}
-            {highlighted && (
+            {highlighted ? (
               <>
                 <div className="flex gap-1 mb-3 border-b border-panel-border">
                   {(["timeline", "narrative"] as const).map((t) => (
@@ -194,6 +226,16 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
                 </div>
                 {rightTab === "timeline" && detected.length > 0 && <Timeline items={detected} nowMs={nowMs} />}
                 {rightTab === "narrative" && narrative && <Narrative text={narrative} />}
+              </>
+            ) : (
+              <>
+                <div className="mb-3 pb-2 border-b border-panel-border">
+                  <h3 className="text-sm font-semibold text-muted">Timeline</h3>
+                </div>
+                <p className="text-sm text-muted border border-dashed border-panel-border rounded-md p-4">
+                  Click &ldquo;Run correlation&rdquo; to see a timeline reconstructed directly from
+                  SecureBERT 2.0&rsquo;s detected alerts, plus Groq&rsquo;s narrative read of the same sequence.
+                </p>
               </>
             )}
           </div>
