@@ -86,7 +86,7 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
           onSelectIndex={setSelectedSample}
           rows={3}
         />
-        <div className="flex justify-end mt-3">
+        <div className="flex justify-start mt-3">
           <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
             Build hunt plan
           </PrimaryButton>

@@ -149,49 +149,50 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
 
       {selected && (
         <div className="mb-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-medium">{selected.case_name}</span>
-              <FamilyBadge family={selected.attack_family} />
-              {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
-              {highlighted && <ConfidenceBadge confidence={confidence} />}
-            </div>
-            <PrimaryButton onClick={run} loading={running} modelWarm={modelWarm}>
-              {highlighted ? "Rerun correlation" : "Run correlation"}
-            </PrimaryButton>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium">{selected.case_name}</span>
+            <FamilyBadge family={selected.attack_family} />
+            {highlighted && riskScore !== null && <RiskBadge score={riskScore} />}
+            {highlighted && <ConfidenceBadge confidence={confidence} />}
           </div>
 
-          {highlighted && gt && (
-            <div className="mt-3 flex items-center justify-between gap-4 flex-wrap rounded border border-panel-border bg-black/20 px-4 py-2.5">
-              {revealed ? (
-                <>
-                  <span className="text-xs font-medium text-muted shrink-0">Correlation accuracy</span>
-                  <div className="flex items-center gap-6 flex-wrap">
-                    <Stat
-                      value={`${gt.correctly_grouped} / ${gt.real_alerts_in_case}`}
-                      label="Real alerts found"
-                      tone="good"
-                    />
-                    <Stat value={gt.missed} label="Missed alerts" tone={gt.missed ? "warn" : "neutral"} />
-                    <Stat
-                      value={gt.noise_fragments_in_detected_cluster}
-                      label="False positives"
-                      tone={gt.noise_fragments_in_detected_cluster ? "bad" : "neutral"}
-                    />
-                    <Stat value={gt.noise_fragments_correctly_excluded} label="Noise excluded" tone="neutral" />
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <PrimaryButton onClick={run} loading={running} modelWarm={modelWarm} className="shrink-0">
+              {highlighted ? "Rerun correlation" : "Run correlation"}
+            </PrimaryButton>
+
+            {highlighted && gt && (
+              <div className="flex-1 min-w-[280px] flex items-center gap-4 flex-wrap rounded border border-panel-border bg-black/20 px-4 py-2.5">
+                <button
+                  onClick={() => setRevealed((r) => !r)}
+                  className="text-sm text-accent underline cursor-pointer shrink-0"
+                >
+                  {revealed ? "Hide ground truth" : "Reveal ground truth"}
+                </button>
+                {revealed ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xs font-medium text-muted shrink-0">Correlation accuracy</span>
+                    <div className="flex items-center gap-6 flex-wrap">
+                      <Stat
+                        value={`${gt.correctly_grouped} / ${gt.real_alerts_in_case}`}
+                        label="Real alerts found"
+                        tone="good"
+                      />
+                      <Stat value={gt.missed} label="Missed alerts" tone={gt.missed ? "warn" : "neutral"} />
+                      <Stat
+                        value={gt.noise_fragments_in_detected_cluster}
+                        label="False positives"
+                        tone={gt.noise_fragments_in_detected_cluster ? "bad" : "neutral"}
+                      />
+                      <Stat value={gt.noise_fragments_correctly_excluded} label="Noise excluded" tone="neutral" />
+                    </div>
                   </div>
-                </>
-              ) : (
-                <span className="text-sm text-muted">Ground truth hidden.</span>
-              )}
-              <button
-                onClick={() => setRevealed((r) => !r)}
-                className="text-sm text-accent underline cursor-pointer shrink-0"
-              >
-                {revealed ? "Hide ground truth" : "Reveal ground truth"}
-              </button>
-            </div>
-          )}
+                ) : (
+                  <span className="text-sm text-muted">Ground truth hidden.</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

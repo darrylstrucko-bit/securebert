@@ -27,11 +27,11 @@ const SAMPLES: Sample[] = [
   },
 ];
 
-// 75% of the original 440x300 -- the map was taking more vertical room than it
-// needed, crowding out everything below it.
+// Kept short enough that the whole panel fits a typical laptop viewport without
+// a page-level scrollbar -- this map was still the tallest thing on the page.
 const WIDTH = 330;
-const HEIGHT = 225;
-const PAD = 28;
+const HEIGHT = 170;
+const PAD = 22;
 
 function buildScale() {
   const allX = [...CASES.map((c) => c.x), ...ALERTS.map((a) => a.x)];
@@ -53,6 +53,21 @@ function dist(ax: number, ay: number, bx: number, by: number) {
 }
 
 const caseById = new Map(CASES.map((c) => [c.case_id, c]));
+
+// Matches the ring-and-dot marker drawn on the map (white, or amber when the
+// plotted point is flagged novel) so the result box visually points back at
+// the same glyph instead of describing it in words alone.
+function PlottedSnippetMarker({ novel }: { novel: boolean }) {
+  const color = novel ? "#f59e0b" : "#ffffff";
+  return (
+    <span
+      className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full"
+      style={{ border: `2px solid ${color}`, backgroundColor: "#0a0e14" }}
+    >
+      <span className="h-1 w-1 rounded-full" style={{ backgroundColor: color }} />
+    </span>
+  );
+}
 
 // A snippet's nearest case counts as "close" if it's no further than the cases'
 // own typical nearest-neighbor spacing -- a simple, visible-on-the-plot
@@ -126,9 +141,9 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
           onChange={setText}
           selectedIndex={selectedSample}
           onSelectIndex={setSelectedSample}
-          rows={3}
+          rows={2}
         />
-        <div className="flex justify-end mt-3">
+        <div className="flex justify-start mt-3">
           <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
             Plot this snippet
           </PrimaryButton>
@@ -136,7 +151,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
         {error && <ErrorNote message={error} />}
       </div>
 
-      <div className="mt-5 max-h-[55vh] overflow-y-auto">
+      <div className="mt-4 max-h-[55vh] overflow-y-auto">
         <div className="grid md:grid-cols-2 gap-6 items-start">
           <div className="border border-panel-border rounded-md bg-black/20 p-2">
             <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
@@ -231,31 +246,40 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
               </span>
               {point && (
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-white inline-block" /> Your snippet
+                  <PlottedSnippetMarker novel={isNovel} /> Plotted snippet
                 </span>
               )}
             </div>
           </div>
 
           <div>
-            {nearest && (
-              <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20">
+            {point && nearest && (
+              <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20 space-y-2">
+                <div className="flex items-center gap-2">
+                  <PlottedSnippetMarker novel={isNovel} />
+                  <span className="font-medium">Plotted snippet</span>
+                  <span className="font-mono-ui text-xs text-muted ml-auto">
+                    PC1 {point[0].toFixed(2)} &middot; PC2 {point[1].toFixed(2)}
+                  </span>
+                </div>
                 {isNovel ? (
                   <p className="text-amber-300">
-                    No close precedent -- this lands further from every case than the cases typically
-                    sit from each other. Possibly novel.
+                    SecureBERT 2.0 embedded your text and PCA placed it here -- further from every
+                    case than the cases typically sit from each other, so nothing on this map reads
+                    as a close match. Possibly novel.
                   </p>
                 ) : (
                   <>
-                    <p className="text-muted mb-1">Nearest on the map:</p>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">
+                    <p className="text-muted">
+                      SecureBERT 2.0 embedded your text and PCA placed it at these coordinates --
+                      nearest to{" "}
+                      <span className="text-foreground font-medium">
                         {nearest.case_id} -- {nearest.case_name}
                       </span>
-                    </div>
-                    <div className="mt-1">
-                      <FamilyBadge family={nearest.attack_family} />
-                    </div>
+                      , closer than to any other case here. That means its embedding reads as more
+                      similar to {nearest.case_id} than to anything else on this map.
+                    </p>
+                    <FamilyBadge family={nearest.attack_family} />
                   </>
                 )}
               </div>

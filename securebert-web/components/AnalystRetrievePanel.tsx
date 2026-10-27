@@ -63,7 +63,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
           onSelectIndex={setSelectedSample}
           rows={4}
         />
-        <div className="flex justify-end mt-3">
+        <div className="flex justify-start mt-3">
           <PrimaryButton onClick={run} loading={loading} modelWarm={modelWarm}>
             Find precedent
           </PrimaryButton>
