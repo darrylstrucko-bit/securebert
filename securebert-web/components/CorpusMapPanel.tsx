@@ -340,7 +340,7 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
                 <div className="mt-3 pt-2 border-t border-panel-border/60">
                   <p className="text-xs text-muted mb-1">Closest known case (for reference only)</p>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm text-muted">
+                    <span className="text-sm font-semibold text-muted">
                       {nearest.case_id} -- {nearest.case_name}
                     </span>
                     <FamilyBadge family={nearest.attack_family} />
