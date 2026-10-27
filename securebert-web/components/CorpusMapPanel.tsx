@@ -29,9 +29,9 @@ const SAMPLES: Sample[] = [
 
 // Kept short enough that the whole panel fits a typical laptop viewport without
 // a page-level scrollbar -- this map was still the tallest thing on the page.
-const WIDTH = 330;
-const HEIGHT = 170;
-const PAD = 22;
+const WIDTH = 380;
+const HEIGHT = 196;
+const PAD = 25;
 
 function buildScale() {
   const allX = [...CASES.map((c) => c.x), ...ALERTS.map((a) => a.x)];
@@ -119,8 +119,8 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
       title="Corpus Map"
       subtitle={
         <>
-          Every case and alert, placed by SecureBERT 2.0&rsquo;s embedding and squashed to 2D with
-          PCA
+          Explore how SecureBERT 2.0 groups security cases and alerts based on their semantic
+          similarity
           <InfoButton label="What is PCA?">
             <span className="font-medium text-foreground">PCA (Principal Component Analysis).</span>{" "}
             SecureBERT 2.0 turns each piece of text into a vector of hundreds of numbers. PCA finds
@@ -129,7 +129,8 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             (PC1, PC2) have no built-in meaning like &ldquo;risk&rdquo; -- they&rsquo;re just whichever
             directions happened to capture the most spread in this data.
           </InfoButton>
-          . No Groq call: the only use case that&rsquo;s pure SecureBERT 2.0, nothing narrated on top.
+          . Related events appear closer together, helping reveal common patterns, clusters, and
+          outliers.
         </>
       }
     >
@@ -252,7 +253,30 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
             </div>
           </div>
 
-          <div>
+          <div className="space-y-3">
+            {nearest && (
+              <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20">
+                {isNovel ? (
+                  <p className="text-amber-300">
+                    No close precedent -- this lands further from every case than the cases typically
+                    sit from each other. Possibly novel.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-muted mb-1">Nearest on the map:</p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {nearest.case_id} -- {nearest.case_name}
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      <FamilyBadge family={nearest.attack_family} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {point && nearest && (
               <div className="text-sm border border-panel-border rounded px-3 py-3 bg-black/20 space-y-2">
                 <div className="flex items-center gap-2">
@@ -266,21 +290,18 @@ export default function CorpusMapPanel({ modelWarm }: { modelWarm: boolean }) {
                   <p className="text-amber-300">
                     SecureBERT 2.0 embedded your text and PCA placed it here -- further from every
                     case than the cases typically sit from each other, so nothing on this map reads
-                    as a close match. Possibly novel.
+                    as a close match.
                   </p>
                 ) : (
-                  <>
-                    <p className="text-muted">
-                      SecureBERT 2.0 embedded your text and PCA placed it at these coordinates --
-                      nearest to{" "}
-                      <span className="text-foreground font-medium">
-                        {nearest.case_id} -- {nearest.case_name}
-                      </span>
-                      , closer than to any other case here. That means its embedding reads as more
-                      similar to {nearest.case_id} than to anything else on this map.
-                    </p>
-                    <FamilyBadge family={nearest.attack_family} />
-                  </>
+                  <p className="text-muted">
+                    SecureBERT 2.0 embedded your text and PCA placed it at these coordinates --
+                    nearest to{" "}
+                    <span className="text-foreground font-medium">
+                      {nearest.case_id} -- {nearest.case_name}
+                    </span>
+                    , closer than to any other case here. That means its embedding reads as more
+                    similar to {nearest.case_id} than to anything else on this map.
+                  </p>
                 )}
               </div>
             )}

@@ -33,13 +33,13 @@ export default function Home() {
                 href="/correlate"
                 meta="SecureBERT 2.0 + Groq/gpt-oss-120b LLM"
                 title="Correlate These Alerts"
-                description="7 case studies, each with its own real alert chain mixed into ~80 unlabeled noise fragments. SecureBERT 2.0 clusters by embedding similarity before you ever see which rows are real; Groq narrates the sequence and scores the risk."
+                description="See how SecureBERT 2.0 identifies related security events within a stream of alerts and background noise. Select a case to reconstruct the attack timeline and reveal the events that matter."
               />
               <UseCaseCard
                 href="/known-pattern"
                 meta="SecureBERT 2.0 + Groq/gpt-oss-120b LLM"
                 title="Is This a Known Pattern?"
-                description="Paste a new, unlabeled incident description. SecureBERT 2.0 retrieves the nearest matching precedent(s) by embedding distance before Groq writes the analyst brief -- grounded retrieval, not a guess."
+                description="Describe a security incident or choose an example to see if SecureBERT 2.0 recognizes similar activity. Explore matching cases, understand their relevance, and get an AI-generated assessment."
               />
             </div>
 
@@ -49,13 +49,13 @@ export default function Home() {
                 href="/hunt-plan"
                 meta="SecureBERT 2.0 + Groq/gpt-oss-120b LLM"
                 title="Hypothesis -> Hunt Plan"
-                description="Type a plain-English hunting hypothesis, classic or AI-native. SecureBERT 2.0 grounds it against the nearest precedent before Groq turns it into a concrete hunt plan with a starter detection query."
+                description="Enter a plain-English hunting hypothesis, traditional or AI-native. SecureBERT 2.0 finds relevant precedents, then Groq uses them to generate a concrete hunt plan."
               />
               <UseCaseCard
                 href="/corpus-map"
                 meta="SecureBERT 2.0 only, no LLM"
                 title="Corpus Map"
-                description="See where all 7 cases sit in embedding space, classic and AI-native, and where a snippet of your own would land -- or whether it looks like nothing seen before. Pure SecureBERT 2.0, no Groq call."
+                description="Explore how SecureBERT 2.0 groups security cases and alerts based on their semantic similarity. Related events appear closer together, helping reveal common patterns, clusters, and outliers."
               />
             </div>
           </div>

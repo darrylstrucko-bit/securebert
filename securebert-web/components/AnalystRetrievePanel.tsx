@@ -50,7 +50,7 @@ export default function AnalystRetrievePanel({ modelWarm }: { modelWarm: boolean
   return (
     <Panel
       title="Is This a Known Pattern?"
-      subtitle="Paste a new, unlabeled incident description. SecureBERT 2.0 retrieves the nearest matching case(s) by embedding distance before Groq writes the brief -- grounded retrieval, not a guess."
+      subtitle="Describe a security incident or choose an example to see if SecureBERT 2.0 recognizes similar activity. Explore matching cases, understand their relevance, and get an AI-generated assessment."
     >
       {/* Pinned top: picker + action stay in place while results below scroll. */}
       <div className="shrink-0">

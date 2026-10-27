@@ -74,7 +74,7 @@ export default function HunterHuntPanel({ modelWarm }: { modelWarm: boolean }) {
   return (
     <Panel
       title="Hypothesis -> Hunt Plan"
-      subtitle="Type a plain-English hunting hypothesis, classic or AI-native. SecureBERT 2.0 grounds it against the nearest precedent before Groq turns it into a concrete hunt plan."
+      subtitle="Enter a plain-English hunting hypothesis, traditional or AI-native. SecureBERT 2.0 finds relevant precedents, then Groq uses them to generate a concrete hunt plan."
     >
       <div className="shrink-0">
         <ExamplePicker

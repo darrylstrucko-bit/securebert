@@ -127,7 +127,7 @@ export default function AnalystCorrelatePanel({ modelWarm }: { modelWarm: boolea
   return (
     <Panel
       title="Correlate These Alerts"
-      subtitle="One of 7 case studies, its real alerts mixed into ~80 noise fragments -- before SecureBERT 2.0 ever runs. Run correlation to see which rows it picks out."
+      subtitle="See how SecureBERT 2.0 identifies related security events within a stream of alerts and background noise. Select a case to reconstruct the attack timeline and reveal the events that matter."
     >
       <div className="flex flex-wrap gap-1.5 mb-4">
         {CASES.map((c) => (
