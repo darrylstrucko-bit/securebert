@@ -11,7 +11,7 @@ export function AppHeader({ pageTitle }: { pageTitle?: string }) {
       <Link href="/" className="flex items-center gap-2.5 shrink-0">
         <Image src="/app-logo.svg" alt="" width={40} height={40} className="h-9 w-9 sm:h-10 sm:w-10" />
         <span className="text-lg sm:text-xl font-semibold leading-none">
-          SecureBERT 2.0 AI Investigation Agent
+          SecureBERT 2.0 for Security Operations
         </span>
       </Link>
       {pageTitle && (

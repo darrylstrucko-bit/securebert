@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SecureBERT 2.0 AI Investigation Agent",
+  title: "SecureBERT 2.0 for Security Operations",
   description:
     "Four SecureBERT 2.0-grounded correlation and retrieval demos spanning classic intrusions and AI-native attacks, mapped to MITRE ATT&CK and ATLAS.",
 };
